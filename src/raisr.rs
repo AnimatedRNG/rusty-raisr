@@ -7,7 +7,7 @@ use nalgebra;
 use nalgebra::DMatrix;
 use rayon::prelude::*;
 
-fn get_pixel_clamped(img: &DMatrix<f32>, coord: (i64, i64)) -> f32 {
+fn get_pixel_clamped(img: &DMatrix<f_t>, coord: (i64, i64)) -> f_t {
     let coord = (
         (coord.0.max(0) as usize).min(img.shape().0 - 1),
         (coord.1.max(0) as usize).min(img.shape().1 - 1),
@@ -16,7 +16,7 @@ fn get_pixel_clamped(img: &DMatrix<f32>, coord: (i64, i64)) -> f32 {
     img[coord]
 }
 
-fn grab_patch(img: &DMatrix<f32>, center: (usize, usize)) -> ImagePatch {
+fn grab_patch(img: &DMatrix<f_t>, center: (usize, usize)) -> ImagePatch {
     let mut patch: ImagePatch = ImagePatch::zeros();
 
     let center = (center.0 as i64, center.1 as i64);
@@ -33,11 +33,11 @@ fn grab_patch(img: &DMatrix<f32>, center: (usize, usize)) -> ImagePatch {
     patch
 }
 
-fn lerp(s: f32, e: f32, t: f32) -> f32 {
+fn lerp(s: f_t, e: f_t, t: f_t) -> f_t {
     s + (e - s) * t
 }
 
-fn blerp(block: &nalgebra::Matrix2<f32>, b_interp: &nalgebra::Vector2<f32>) -> f32 {
+fn blerp(block: &nalgebra::Matrix2<f_t>, b_interp: &nalgebra::Vector2<f_t>) -> f_t {
     lerp(
         lerp(block[(0, 0)], block[(0, 1)], b_interp[0]),
         lerp(block[(1, 0)], block[(1, 1)], b_interp[0]),
@@ -45,16 +45,16 @@ fn blerp(block: &nalgebra::Matrix2<f32>, b_interp: &nalgebra::Vector2<f32>) -> f
     )
 }
 
-fn bilinear_filter(img: &DMatrix<f32>, ideal_size: (usize, usize)) -> DMatrix<f32> {
-    let dx = img.shape().0 as f32 / ideal_size.0 as f32;
-    let dy = img.shape().1 as f32 / ideal_size.1 as f32;
+fn bilinear_filter(img: &DMatrix<f_t>, ideal_size: (usize, usize)) -> DMatrix<f_t> {
+    let dx = img.shape().0 as f_t / ideal_size.0 as f_t;
+    let dy = img.shape().1 as f_t / ideal_size.1 as f_t;
 
     let mut output_image = DMatrix::zeros(ideal_size.0, ideal_size.1);
 
     for i in 0..ideal_size.0 {
-        let x = i as f32 * dx;
+        let x = i as f_t * dx;
         for j in 0..ideal_size.1 {
-            let y = j as f32 * dy;
+            let y = j as f_t * dy;
 
             let i_x = x as i64;
             let i_y = y as i64;
@@ -77,7 +77,7 @@ fn bilinear_filter(img: &DMatrix<f32>, ideal_size: (usize, usize)) -> DMatrix<f3
     output_image
 }
 
-fn create_filter_image(hr_y: &DMatrix<f32>) -> (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>) {
+fn create_filter_image(hr_y: &DMatrix<f_t>) -> (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>) {
     let dims = hr_y.shape();
 
     let ideal_size = (dims.0, dims.1);
@@ -159,10 +159,10 @@ mod tests {
     }
 
     fn test_patch() {
-        let mut img: DMatrix<f32> = nalgebra::DMatrix::zeros(50, 50);
+        let mut img: DMatrix<f_t> = nalgebra::DMatrix::zeros(50, 50);
         for i in 0..50 {
             for j in 0..50 {
-                img[(i, j)] = (f32::sin(i as f32) + f32::cos(i as f32)) as f32;
+                img[(i, j)] = (f_t::sin(i as f_t) + f_t::cos(i as f_t)) as f_t;
             }
         }
 
@@ -184,7 +184,9 @@ mod tests {
         //let hr_cr = bilinear_filter(&cr, ideal_size);
 
         let filter_image = create_filter_image(&hr_y);
-        let debug = debug_filter_image(&filter_image.0, &filter_image.1, &filter_image.2);
+        let empty: DMatrix<u8> = DMatrix::zeros(ideal_size.0, ideal_size.1);
+        //let debug = debug_filter_image(&filter_image.0, &filter_image.1, &filter_image.2);
+        let debug = debug_filter_image(&filter_image.0, &empty, &empty.clone());
 
         println!("debug size {:?}", debug.0.shape());
 

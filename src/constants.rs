@@ -1,5 +1,7 @@
 use nalgebra;
 
+pub type f_t = f32;
+
 pub const PATCH_SIZE: usize = 11;
 pub const GRADIENT_SIZE: usize = 9;
 pub const GRADIENT_VECTOR_SIZE: usize = GRADIENT_SIZE * GRADIENT_SIZE;
@@ -20,24 +22,24 @@ pub type GradientSizeType = nalgebra::U9;
 pub type GradientVectorSizeType = nalgebra::U81;
 
 pub type ImagePatch = nalgebra::Matrix<
-    f32,
+    f_t,
     PatchSizeType,
     PatchSizeType,
-    nalgebra::MatrixArray<f32, PatchSizeType, PatchSizeType>,
+    nalgebra::MatrixArray<f_t, PatchSizeType, PatchSizeType>,
 >;
 pub type GradientBlock = nalgebra::Matrix<
-    f32,
+    f_t,
     GradientSizeType,
     GradientSizeType,
-    nalgebra::MatrixArray<f32, GradientSizeType, GradientSizeType>,
+    nalgebra::MatrixArray<f_t, GradientSizeType, GradientSizeType>,
 >;
 pub type GradientVector = nalgebra::Vector<
-    f32,
+    f_t,
     GradientVectorSizeType,
-    nalgebra::MatrixArray<f32, GradientVectorSizeType, nalgebra::U1>,
+    nalgebra::MatrixArray<f_t, GradientVectorSizeType, nalgebra::U1>,
 >;
 
-pub const weights: [f32; GRADIENT_SIZE * GRADIENT_SIZE] = [
+pub const weights: [f_t; GRADIENT_SIZE * GRADIENT_SIZE] = [
     0.00076345, 0.00183141, 0.00342153, 0.0049783, 0.00564116, 0.0049783, 0.00342153, 0.00183141,
     0.00076345, 0.00183141, 0.00439334, 0.00820783, 0.01194233, 0.01353243, 0.01194233, 0.00820783,
     0.00439334, 0.00183141, 0.00342153, 0.00820783, 0.01533425, 0.0223112, 0.0252819, 0.0223112,

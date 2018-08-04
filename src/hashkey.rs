@@ -1,13 +1,13 @@
 use constants::*;
 use nalgebra;
 use std::cmp::max;
-use std::f32::consts::PI;
+use std::f64::consts::PI;
 
 type WeightsType = nalgebra::Matrix<
-    f32,
+    f_t,
     GradientVectorSizeType,
     GradientVectorSizeType,
-    nalgebra::MatrixArray<f32, GradientVectorSizeType, GradientVectorSizeType>,
+    nalgebra::MatrixArray<f_t, GradientVectorSizeType, GradientVectorSizeType>,
 >;
 
 fn sobel_filter(input: &ImagePatch) -> (GradientBlock, GradientBlock) {
@@ -40,8 +40,8 @@ fn sobel_filter(input: &ImagePatch) -> (GradientBlock, GradientBlock) {
 }
 
 fn eigendecomposition(
-    m: &nalgebra::Matrix2<f32>,
-) -> (nalgebra::Vector2<f32>, nalgebra::Matrix2<f32>) {
+    m: &nalgebra::Matrix2<f_t>,
+) -> (nalgebra::Vector2<f_t>, nalgebra::Matrix2<f_t>) {
     let (a, b, c, d) = (m[(0, 0)], m[(0, 1)], m[(1, 0)], m[(1, 1)]);
     if b * c <= 1e-20 {
         (
@@ -55,7 +55,7 @@ fn eigendecomposition(
         let lamb = nalgebra::Vector2::new(tr / 2.0 + s, tr / 2.0 - s);
 
         let ss = (((a - d) / 2.0).powi(2) + b * c).max(0.0).sqrt();
-        let mut ev: nalgebra::Matrix2<f32> = if a - d < 0.0 {
+        let mut ev: nalgebra::Matrix2<f_t> = if a - d < 0.0 {
             nalgebra::Matrix2::new(c, (a - d) / 2.0 - ss, -(a - d) / 2.0 + ss, b)
         } else {
             nalgebra::Matrix2::new((a - d) / 2.0 + ss, c, b, -(a - d) / 2.0 - ss)
@@ -77,10 +77,10 @@ pub fn hashkey<T: From<u8> + Copy>(block: &ImagePatch) -> (T, T, T) {
     let gy: GradientVector = GradientVector::from_column_slice(gy.as_slice());
 
     type GType = nalgebra::Matrix<
-        f32,
+        f_t,
         GradientVectorSizeType,
         nalgebra::U2,
-        nalgebra::MatrixArray<f32, GradientVectorSizeType, nalgebra::U2>,
+        nalgebra::MatrixArray<f_t, GradientVectorSizeType, nalgebra::U2>,
     >;
 
     let mut g = GType::zeros();
@@ -88,10 +88,10 @@ pub fn hashkey<T: From<u8> + Copy>(block: &ImagePatch) -> (T, T, T) {
     g.set_column(1, &gy);
 
     type WType = nalgebra::Matrix<
-        f32,
+        f_t,
         GradientVectorSizeType,
         GradientVectorSizeType,
-        nalgebra::MatrixArray<f32, GradientVectorSizeType, GradientVectorSizeType>,
+        nalgebra::MatrixArray<f_t, GradientVectorSizeType, GradientVectorSizeType>,
     >;
 
     let weights_diag = WType::from_diagonal(&GradientVector::from_row_slice(&weights));
@@ -99,8 +99,12 @@ pub fn hashkey<T: From<u8> + Copy>(block: &ImagePatch) -> (T, T, T) {
     let gtwg = g.transpose() * weights_diag * g;
     let (w, v) = eigendecomposition(&gtwg);
 
-    let theta = f32::atan2(v[(1, 0)], v[(0, 0)]);
-    let theta = if theta < 0.0 { theta + PI } else { theta };
+    let theta = f_t::atan2(v[(1, 0)], v[(0, 0)]);
+    let theta = if theta < 0.0 {
+        theta + PI as f_t
+    } else {
+        theta
+    };
     let lambda = w[0];
 
     let sqrtlambda1 = w[0].sqrt();
@@ -111,7 +115,7 @@ pub fn hashkey<T: From<u8> + Copy>(block: &ImagePatch) -> (T, T, T) {
         (sqrtlambda1 - sqrtlambda2) / (sqrtlambda1 + sqrtlambda2)
     };
 
-    let angle = (theta / PI * Q_ANGLE as f32).floor();
+    let angle = (theta / PI as f_t * Q_ANGLE as f_t).floor();
     let strength: T = if lambda < 0.0001 {
         0
     } else if lambda > 0.001 {
@@ -145,10 +149,10 @@ mod tests {
     use nalgebra;
 
     fn get_test_patch() -> ImagePatch {
-        let mut patch: [f32; PATCH_SIZE * PATCH_SIZE] = [0.0; PATCH_SIZE * PATCH_SIZE];
+        let mut patch: [f_t; PATCH_SIZE * PATCH_SIZE] = [0.0; PATCH_SIZE * PATCH_SIZE];
         for x in 0..PATCH_SIZE {
             for y in 0..PATCH_SIZE {
-                patch[x * PATCH_SIZE + y] = f32::cos(x as f32) * f32::sin(y as f32);
+                patch[x * PATCH_SIZE + y] = f_t::cos(x as f_t) * f_t::sin(y as f_t);
             }
         }
         ImagePatch::from_row_slice(&patch).transpose() / 5.0

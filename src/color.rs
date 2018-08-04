@@ -1,13 +1,14 @@
+use constants::f_t;
 use nalgebra;
 
 pub fn to_ycbcr(
-    red: &nalgebra::DMatrix<f32>,
-    green: &nalgebra::DMatrix<f32>,
-    blue: &nalgebra::DMatrix<f32>,
+    red: &nalgebra::DMatrix<f_t>,
+    green: &nalgebra::DMatrix<f_t>,
+    blue: &nalgebra::DMatrix<f_t>,
 ) -> (
-    nalgebra::DMatrix<f32>,
-    nalgebra::DMatrix<f32>,
-    nalgebra::DMatrix<f32>,
+    nalgebra::DMatrix<f_t>,
+    nalgebra::DMatrix<f_t>,
+    nalgebra::DMatrix<f_t>,
 ) {
     let y = 0.299 * red + 0.587 * green + 0.114 * blue;
     let cb = -0.168736 * red - 0.331264 * green + 0.500 * blue;
@@ -17,13 +18,13 @@ pub fn to_ycbcr(
 }
 
 pub fn from_ycbcr(
-    y: &nalgebra::DMatrix<f32>,
-    cb: &nalgebra::DMatrix<f32>,
-    cr: &nalgebra::DMatrix<f32>,
+    y: &nalgebra::DMatrix<f_t>,
+    cb: &nalgebra::DMatrix<f_t>,
+    cr: &nalgebra::DMatrix<f_t>,
 ) -> (
-    nalgebra::DMatrix<f32>,
-    nalgebra::DMatrix<f32>,
-    nalgebra::DMatrix<f32>,
+    nalgebra::DMatrix<f_t>,
+    nalgebra::DMatrix<f_t>,
+    nalgebra::DMatrix<f_t>,
 ) {
     let red = y + 1.402 * cr;
     let green = y - 0.344136 * cb - 0.714136 * cr;
