@@ -71,7 +71,7 @@ fn eigendecomposition(
     }
 }
 
-pub fn hashkey(block: &ImagePatch, weights: &WeightsType) -> (usize, usize, usize) {
+pub fn hashkey(block: &ImagePatch) -> (usize, usize, usize) {
     let (gy, gx) = sobel_filter(block);
     let gx: GradientVector = GradientVector::from_column_slice(gx.as_slice());
     let gy: GradientVector = GradientVector::from_column_slice(gy.as_slice());
@@ -86,7 +86,17 @@ pub fn hashkey(block: &ImagePatch, weights: &WeightsType) -> (usize, usize, usiz
     let mut g = GType::zeros();
     g.set_column(0, &gx);
     g.set_column(1, &gy);
-    let gtwg = g.transpose() * weights * g;
+
+    type WType = nalgebra::Matrix<
+        f32,
+        GradientVectorSizeType,
+        GradientVectorSizeType,
+        nalgebra::MatrixArray<f32, GradientVectorSizeType, GradientVectorSizeType>,
+    >;
+
+    let weights_diag = WType::from_diagonal(&GradientVector::from_row_slice(&weights));
+
+    let gtwg = g.transpose() * weights_diag * g;
     let (w, v) = eigendecomposition(&gtwg);
 
     let theta = f32::atan2(v[(1, 0)], v[(0, 0)]);
@@ -134,18 +144,27 @@ mod tests {
     use hashkey::*;
     use nalgebra;
 
-    #[test]
-    fn test_sobel() {
+    fn get_test_patch() -> ImagePatch {
         let mut patch: [f32; PATCH_SIZE * PATCH_SIZE] = [0.0; PATCH_SIZE * PATCH_SIZE];
         for x in 0..PATCH_SIZE {
             for y in 0..PATCH_SIZE {
-                patch[x * PATCH_SIZE + y] = ((x) % 5) as f32;
+                patch[x * PATCH_SIZE + y] = f32::cos(x as f32) * f32::sin(y as f32);
             }
         }
-        let mut patch: ImagePatch = ImagePatch::from_row_slice(&patch).transpose();
-        patch /= 5.0;
+        ImagePatch::from_row_slice(&patch).transpose() / 5.0
+    }
+
+    #[test]
+    fn test_sobel() {
+        let mut patch = get_test_patch();
         println!("Patch: {}", patch);
         println!("Sobel: {}", sobel_filter(&patch).0);
+    }
+
+    #[test]
+    fn test_hashkey() {
+        let mut patch = get_test_patch();
+        println!("Hash: {:?}", hashkey(&patch));
     }
 
     #[test]
