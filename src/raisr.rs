@@ -83,7 +83,7 @@ fn create_filter_image(hr_y: &DMatrix<f_t>) -> (DMatrix<u8>, DMatrix<u8>, DMatri
     let ideal_size = (dims.0, dims.1);
 
     let results: Vec<Vec<((usize, usize), (u8, u8, u8))>> = (0..ideal_size.0)
-        .into_iter()
+        .into_par_iter()
         .map(|x: usize| {
             (0..ideal_size.1)
                 .map(|y: usize| {

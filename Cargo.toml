@@ -9,4 +9,8 @@ image = "0.19.0"
 rayon = "1.0.2"
 itertools = "*"
 cpython = "*"
+ndarray = { version = "0.11.0", features = ["blas"] }
+blas-src = { version = "0.2.0", default-features = false, features = ["openblas"] }
+openblas-src = { version = "0.6.0", default-features = false, features = ["cblas", "system"] }
+byteorder = "1.2.4"
 #torchrs = { git = "https://github.com/torchrs/torchrs.git" }

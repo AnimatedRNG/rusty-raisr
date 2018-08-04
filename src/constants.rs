@@ -1,14 +1,17 @@
 use nalgebra;
+use ndarray::prelude::*;
 
 pub type f_t = f32;
 
 pub const PATCH_SIZE: usize = 11;
 pub const GRADIENT_SIZE: usize = 9;
 pub const GRADIENT_VECTOR_SIZE: usize = GRADIENT_SIZE * GRADIENT_SIZE;
+pub const PATCH_VECTOR_SIZE: usize = PATCH_SIZE * PATCH_SIZE;
 pub const Q_ANGLE: usize = 24;
 pub const Q_COHERENCE: usize = 3;
 pub const Q_STRENGTH: usize = 3;
 pub const R: usize = 2;
+pub const R_2: usize = R * R;
 
 pub const MAX_BLOCK_SIZE: usize = GRADIENT_SIZE;
 pub const MARGIN: usize = MAX_BLOCK_SIZE / 2;
