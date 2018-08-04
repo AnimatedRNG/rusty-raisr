@@ -13,6 +13,8 @@ pub const MARGIN: usize = MAX_BLOCK_SIZE / 2;
 pub const PATCH_MARGIN: usize = PATCH_SIZE / 2;
 pub const GRADIENT_MARGIN: usize = GRADIENT_SIZE / 2;
 
+pub const TILE_SIZE: usize = 64;
+
 pub type PatchSizeType = nalgebra::U11;
 pub type GradientSizeType = nalgebra::U9;
 pub type GradientVectorSizeType = nalgebra::U81;

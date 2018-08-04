@@ -2,8 +2,10 @@ use color::{from_ycbcr, to_ycbcr};
 use constants::*;
 use hashkey::hashkey;
 use image_io::read_image;
+use itertools::Itertools;
 use nalgebra;
 use nalgebra::DMatrix;
+use rayon::prelude::*;
 
 fn get_pixel_clamped(img: &DMatrix<f32>, coord: (i64, i64)) -> f32 {
     let coord = (
@@ -75,7 +77,57 @@ fn bilinear_filter(img: &DMatrix<f32>, ideal_size: (usize, usize)) -> DMatrix<f3
     output_image
 }
 
-fn create_filter_image(img: &(DMatrix<f32>, DMatrix<f32>, DMatrix<f32>)) {}
+fn create_filter_image(img: &(DMatrix<f32>, DMatrix<f32>, DMatrix<f32>)) -> DMatrix<f32> {
+    let (r, g, b) = img;
+    let (y, cb, cr) = to_ycbcr(&r, &g, &b);
+
+    let dims = y.shape();
+
+    let ideal_size = (dims.0 * R, dims.1 * R);
+
+    let hr_y = bilinear_filter(&y, ideal_size);
+    let hr_cb = bilinear_filter(&cb, ideal_size);
+    let hr_cr = bilinear_filter(&cr, ideal_size);
+
+    let tile_indices = (0..ideal_size.0 / TILE_SIZE).map(|a| a * TILE_SIZE);
+    let tile_indices_1 = tile_indices.clone();
+    let tiles: Vec<(usize, usize)> = tile_indices_1.cartesian_product(tile_indices).collect();
+
+    let processed_tiles: Vec<((usize, usize), DMatrix<f32>)> = tiles
+        .par_iter()
+        .map(|tile| {
+            let tile_dims = (
+                ideal_size.0.min(tile.0 + TILE_SIZE),
+                ideal_size.1.min(tile.1 + TILE_SIZE),
+            );
+            let mut result_tile: DMatrix<f32> =
+                DMatrix::zeros(tile_dims.0 - tile.0, tile_dims.1 - tile.1);
+            for i in tile.0..tile_dims.0 {
+                for j in tile.1..tile_dims.1 {
+                    let patch = grab_patch(&hr_y, (i, j));
+                    let key = hashkey(&patch);
+                    let debug_color = (key.0 as f32 / 24.0, key.1 as f32 / 3.0, key.2 as f32 / 3.0);
+                    result_tile[(i - tile.0, j - tile.1)] = debug_color.0;
+                    //println!("{:?}", key);
+                }
+            }
+            (tile_dims, result_tile)
+        })
+        .collect();
+
+    let mut final_y = DMatrix::zeros(ideal_size.0, ideal_size.1);
+
+    // Couldn't get nalgebra slice copying working....
+    for ((x_offset, y_offset), tile) in processed_tiles {
+        for x in x_offset..x_offset + tile.shape().0 {
+            for y in y_offset..y_offset + tile.shape().1 {
+                final_y[(x, y)] = tile[(x - x_offset, y - y_offset)];
+            }
+        }
+    }
+
+    final_y
+}
 
 #[cfg(test)]
 mod tests {
@@ -89,7 +141,8 @@ mod tests {
     fn test_raisr() {
         //test_create_filter_image();
         //test_bilinear_filter_image();
-        test_patch();
+        //test_patch();
+        test_hash_image();
     }
 
     fn test_create_filter_image() {
@@ -121,5 +174,10 @@ mod tests {
         }
 
         println!("Patch: {}", grab_patch(&img, (2, 2)));
+    }
+
+    fn test_hash_image() {
+        let img = read_image("test/veronica.jpg");
+        create_filter_image(&img);
     }
 }
