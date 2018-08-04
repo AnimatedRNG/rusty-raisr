@@ -77,63 +77,56 @@ fn bilinear_filter(img: &DMatrix<f32>, ideal_size: (usize, usize)) -> DMatrix<f3
     output_image
 }
 
-fn create_filter_image(img: &(DMatrix<f32>, DMatrix<f32>, DMatrix<f32>)) -> DMatrix<f32> {
-    let (r, g, b) = img;
-    let (y, cb, cr) = to_ycbcr(&r, &g, &b);
+fn create_filter_image(hr_y: &DMatrix<f32>) -> (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>) {
+    let dims = hr_y.shape();
 
-    let dims = y.shape();
+    let ideal_size = (dims.0, dims.1);
 
-    let ideal_size = (dims.0 * R, dims.1 * R);
-
-    let hr_y = bilinear_filter(&y, ideal_size);
-    let hr_cb = bilinear_filter(&cb, ideal_size);
-    let hr_cr = bilinear_filter(&cr, ideal_size);
-
-    let tile_indices = (0..ideal_size.0 / TILE_SIZE).map(|a| a * TILE_SIZE);
-    let tile_indices_1 = tile_indices.clone();
-    let tiles: Vec<(usize, usize)> = tile_indices_1.cartesian_product(tile_indices).collect();
-
-    let processed_tiles: Vec<((usize, usize), DMatrix<f32>)> = tiles
-        .par_iter()
-        .map(|tile| {
-            let tile_dims = (
-                ideal_size.0.min(tile.0 + TILE_SIZE),
-                ideal_size.1.min(tile.1 + TILE_SIZE),
-            );
-            let mut result_tile: DMatrix<f32> =
-                DMatrix::zeros(tile_dims.0 - tile.0, tile_dims.1 - tile.1);
-            for i in tile.0..tile_dims.0 {
-                for j in tile.1..tile_dims.1 {
-                    let patch = grab_patch(&hr_y, (i, j));
+    let results: Vec<Vec<((usize, usize), (u8, u8, u8))>> = (0..ideal_size.0)
+        .into_par_iter()
+        .map(|x: usize| {
+            (0..ideal_size.1)
+                .map(|y: usize| {
+                    let patch = grab_patch(&hr_y, (x, y));
                     let key = hashkey(&patch);
-                    let debug_color = (key.0 as f32 / 24.0, key.1 as f32 / 3.0, key.2 as f32 / 3.0);
-                    result_tile[(i - tile.0, j - tile.1)] = debug_color.0;
-                    //println!("{:?}", key);
-                }
-            }
-            (tile_dims, result_tile)
+                    ((x, y), key)
+                })
+                .collect()
         })
         .collect();
 
-    let mut final_y = DMatrix::zeros(ideal_size.0, ideal_size.1);
+    let mut final_angle: DMatrix<u8> = DMatrix::zeros(ideal_size.0, ideal_size.1);
+    let mut final_strength: DMatrix<u8> = DMatrix::zeros(ideal_size.0, ideal_size.1);
+    let mut final_coherence: DMatrix<u8> = DMatrix::zeros(ideal_size.0, ideal_size.1);
 
-    // Couldn't get nalgebra slice copying working....
-    for ((x_offset, y_offset), tile) in processed_tiles {
-        for x in x_offset..x_offset + tile.shape().0 {
-            for y in y_offset..y_offset + tile.shape().1 {
-                final_y[(x, y)] = tile[(x - x_offset, y - y_offset)];
-            }
-        }
-    }
+    results.iter().foreach(|row| {
+        row.iter().foreach(|((x, y), value)| {
+            final_angle[(*x, *y)] = value.0;
+            final_strength[(*x, *y)] = value.1;
+            final_coherence[(*x, *y)] = value.2;
+        })
+    });
 
-    final_y
+    (final_angle, final_strength, final_coherence)
+}
+
+fn debug_filter_image(
+    angle: &DMatrix<u8>,
+    strength: &DMatrix<u8>,
+    coherence: &DMatrix<u8>,
+) -> (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>) {
+    (
+        angle * (255 / Q_ANGLE as u8),
+        strength * (255 / Q_STRENGTH as u8),
+        coherence * (255 / Q_COHERENCE as u8),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use color::{from_ycbcr, to_ycbcr};
     use constants::*;
-    use image_io::{read_image, write_image};
+    use image_io::{read_image, write_image, write_image_u8};
     use nalgebra;
     use raisr::*;
 
@@ -177,7 +170,24 @@ mod tests {
     }
 
     fn test_hash_image() {
-        let img = read_image("test/veronica.jpg");
-        create_filter_image(&img);
+        let img = read_image("test/Fallout.jpg");
+
+        let (r, g, b) = img;
+        let (y, cb, cr) = to_ycbcr(&r, &g, &b);
+
+        let dims = y.shape();
+
+        let ideal_size = (dims.0 * R, dims.1 * R);
+
+        let hr_y = bilinear_filter(&y, ideal_size);
+        //let hr_cb = bilinear_filter(&cb, ideal_size);
+        //let hr_cr = bilinear_filter(&cr, ideal_size);
+
+        let filter_image = create_filter_image(&hr_y);
+        let debug = debug_filter_image(&filter_image.0, &filter_image.1, &filter_image.2);
+
+        println!("debug size {:?}", debug.0.shape());
+
+        write_image_u8("output/Fallout_result.png", &debug);
     }
 }

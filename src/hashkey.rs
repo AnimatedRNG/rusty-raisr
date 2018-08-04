@@ -71,7 +71,7 @@ fn eigendecomposition(
     }
 }
 
-pub fn hashkey(block: &ImagePatch) -> (usize, usize, usize) {
+pub fn hashkey(block: &ImagePatch) -> (u8, u8, u8) {
     let (gy, gx) = sobel_filter(block);
     let gx: GradientVector = GradientVector::from_column_slice(gx.as_slice());
     let gy: GradientVector = GradientVector::from_column_slice(gy.as_slice());
@@ -132,7 +132,7 @@ pub fn hashkey(block: &ImagePatch) -> (usize, usize, usize) {
     } else if angle < 0.0 {
         0
     } else {
-        angle as usize
+        angle as u8
     };
 
     (angle, strength, coherence)

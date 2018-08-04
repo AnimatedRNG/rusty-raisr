@@ -42,3 +42,18 @@ pub fn write_image(filename: &str, img: &(DMatrix<f32>, DMatrix<f32>, DMatrix<f3
 
     buffer.save(filename).unwrap();
 }
+
+pub fn write_image_u8(filename: &str, img: &(DMatrix<u8>, DMatrix<u8>, DMatrix<u8>)) {
+    if fs::metadata(filename).is_ok() {
+        fs::remove_file(filename).unwrap();
+    }
+
+    let ref mut buffer =
+        image::ImageBuffer::from_fn(img.0.shape().0 as u32, img.0.shape().1 as u32, |x, y| {
+            let (x, y) = (x as usize, y as usize);
+            let pixel = [img.0[(x, y)], img.1[(x, y)], img.2[(x, y)]];
+            image::Rgb(pixel)
+        });
+
+    buffer.save(filename).unwrap();
+}
