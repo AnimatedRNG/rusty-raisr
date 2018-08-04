@@ -1,0 +1,8 @@
+[package]
+name = "rusty_raisr"
+version = "0.1.0"
+authors = ["Srinivas Kaza <srinivas@kaza.io>"]
+
+[dependencies]
+nalgebra = "0.16.0"
+#torchrs = { git = "https://github.com/torchrs/torchrs.git" }
