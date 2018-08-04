@@ -83,7 +83,7 @@ fn create_filter_image(hr_y: &DMatrix<f_t>) -> (DMatrix<u8>, DMatrix<u8>, DMatri
     let ideal_size = (dims.0, dims.1);
 
     let results: Vec<Vec<((usize, usize), (u8, u8, u8))>> = (0..ideal_size.0)
-        .into_par_iter()
+        .into_iter()
         .map(|x: usize| {
             (0..ideal_size.1)
                 .map(|y: usize| {
@@ -110,15 +110,23 @@ fn create_filter_image(hr_y: &DMatrix<f_t>) -> (DMatrix<u8>, DMatrix<u8>, DMatri
     (final_angle, final_strength, final_coherence)
 }
 
+fn to_float(m: &DMatrix<u8>, normalize: bool) -> DMatrix<f_t> {
+    m.map(|a| a as f32 / (if normalize { 255.0 } else { 1.0 }))
+}
+
+fn to_byte(m: &DMatrix<f_t>) -> DMatrix<u8> {
+    m.map(|a| (a * 255.0) as u8)
+}
+
 fn debug_filter_image(
     angle: &DMatrix<u8>,
     strength: &DMatrix<u8>,
     coherence: &DMatrix<u8>,
 ) -> (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>) {
     (
-        angle * (255 / Q_ANGLE as u8),
-        strength * (255 / Q_STRENGTH as u8),
-        coherence * (255 / Q_COHERENCE as u8),
+        to_byte(&(to_float(angle, false) / Q_ANGLE as f32)),
+        to_byte(&(to_float(strength, false) / Q_STRENGTH as f32)),
+        to_byte(&(to_float(coherence, false) / Q_COHERENCE as f32)),
     )
 }
 
@@ -159,14 +167,15 @@ mod tests {
     }
 
     fn test_patch() {
-        let mut img: DMatrix<f_t> = nalgebra::DMatrix::zeros(50, 50);
-        for i in 0..50 {
-            for j in 0..50 {
-                img[(i, j)] = (f_t::sin(i as f_t) + f_t::cos(i as f_t)) as f_t;
-            }
-        }
+        let img = read_image("test/Fallout.jpg");
+        let (r, g, b) = img;
+        let (y, cb, cr) = to_ycbcr(&r, &g, &b);
+        let dims = y.shape();
+        let ideal_size = (dims.0 * R, dims.1 * R);
+        let hr_y = bilinear_filter(&y, ideal_size);
+        let patch = grab_patch(&hr_y, (300, 250));
 
-        println!("Patch: {}", grab_patch(&img, (2, 2)));
+        println!("Patch: {}", patch);
     }
 
     fn test_hash_image() {
@@ -184,12 +193,12 @@ mod tests {
         //let hr_cr = bilinear_filter(&cr, ideal_size);
 
         let filter_image = create_filter_image(&hr_y);
-        let empty: DMatrix<u8> = DMatrix::zeros(ideal_size.0, ideal_size.1);
-        //let debug = debug_filter_image(&filter_image.0, &filter_image.1, &filter_image.2);
-        let debug = debug_filter_image(&filter_image.0, &empty, &empty.clone());
-
-        println!("debug size {:?}", debug.0.shape());
+        let empty = DMatrix::<u8>::zeros(filter_image.0.shape().0, filter_image.0.shape().1);
+        let debug = debug_filter_image(&filter_image.0, &filter_image.1, &filter_image.2);
+        //let debug = debug_filter_image(&filter_image.0, &empty, &empty.clone());
+        //let debug = (hr_y.clone(), hr_y.clone(), hr_y.clone());
 
         write_image_u8("output/Fallout_result.png", &debug);
+        //write_image("output/Fallout_result.png", &debug);
     }
 }

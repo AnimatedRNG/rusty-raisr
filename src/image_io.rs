@@ -20,7 +20,7 @@ pub fn read_image(filename: &str) -> (DMatrix<f_t>, DMatrix<f_t>, DMatrix<f_t>) 
         blue[(x, y)] = pixel[2] as f_t / 255.0;
     }
 
-    (red, green, blue)
+    (red.transpose(), green.transpose(), blue.transpose())
 }
 
 pub fn write_image(filename: &str, img: &(DMatrix<f_t>, DMatrix<f_t>, DMatrix<f_t>)) {
@@ -31,12 +31,12 @@ pub fn write_image(filename: &str, img: &(DMatrix<f_t>, DMatrix<f_t>, DMatrix<f_
     let to_u8 = |f| (f as f_t * 255.0) as u8;
 
     let ref mut buffer =
-        image::ImageBuffer::from_fn(img.0.shape().0 as u32, img.0.shape().1 as u32, |x, y| {
+        image::ImageBuffer::from_fn(img.0.shape().1 as u32, img.0.shape().0 as u32, |x, y| {
             let (x, y) = (x as usize, y as usize);
             let pixel = [
-                to_u8(img.0[(x, y)]),
-                to_u8(img.1[(x, y)]),
-                to_u8(img.2[(x, y)]),
+                to_u8(img.0[(y, x)]),
+                to_u8(img.1[(y, x)]),
+                to_u8(img.2[(y, x)]),
             ];
             image::Rgb(pixel)
         });
@@ -50,9 +50,9 @@ pub fn write_image_u8(filename: &str, img: &(DMatrix<u8>, DMatrix<u8>, DMatrix<u
     }
 
     let ref mut buffer =
-        image::ImageBuffer::from_fn(img.0.shape().0 as u32, img.0.shape().1 as u32, |x, y| {
+        image::ImageBuffer::from_fn(img.0.shape().1 as u32, img.0.shape().0 as u32, |x, y| {
             let (x, y) = (x as usize, y as usize);
-            let pixel = [img.0[(x, y)], img.1[(x, y)], img.2[(x, y)]];
+            let pixel = [img.0[(y, x)], img.1[(y, x)], img.2[(y, x)]];
             image::Rgb(pixel)
         });
 

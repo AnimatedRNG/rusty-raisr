@@ -144,9 +144,14 @@ pub fn hashkey<T: From<u8> + Copy>(block: &ImagePatch) -> (T, T, T) {
 
 #[cfg(test)]
 mod tests {
+    extern crate cpython;
+
+    use self::cpython::{PyDict, PyResult, Python};
     use constants::*;
     use hashkey::*;
     use nalgebra;
+    use std::fs;
+    use std::io::{BufRead, BufReader};
 
     fn get_test_patch() -> ImagePatch {
         let mut patch: [f_t; PATCH_SIZE * PATCH_SIZE] = [0.0; PATCH_SIZE * PATCH_SIZE];
@@ -167,8 +172,52 @@ mod tests {
 
     #[test]
     fn test_hashkey() {
-        let mut patch = get_test_patch();
-        println!("Hash: {:?}", hashkey::<u8>(&patch));
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+
+        let locals = PyDict::new(py);
+        locals
+            .set_item(py, "random", py.import("random").unwrap())
+            .unwrap();
+        py.eval("random.seed(1234)", None, Some(&locals)).unwrap();
+        let rng = || {
+            py.eval("random.random()", None, Some(&locals))
+                .unwrap()
+                .extract::<f32>(py)
+                .unwrap()
+        };
+        let create_image = || {
+            let mut mat: ImagePatch = ImagePatch::zeros();
+            for i in 0..11 {
+                for j in 0..11 {
+                    mat[(i, j)] = rng();
+                }
+            }
+            mat
+        };
+
+        let reference = fs::File::open("reference/hash_reference.txt").unwrap();
+        let reference = BufReader::new(&reference);
+
+        for line in reference.lines() {
+            let mut patch = create_image();
+            let reference_values: Vec<u8> = line
+                .unwrap()
+                .split(" ")
+                .map(|a| str::parse(a).unwrap())
+                .collect();
+            assert!(reference_values.len() == 3);
+            let (a, s, c) = (
+                reference_values[0],
+                reference_values[1],
+                reference_values[2],
+            );
+            let hash = hashkey::<u8>(&patch);
+            assert!(hash == (a, s, c));
+
+            println!("Hash: {:?}", hash);
+            println!("Reference values: {:?}", reference_values);
+        }
     }
 
     #[test]
