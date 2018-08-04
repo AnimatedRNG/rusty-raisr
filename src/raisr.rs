@@ -5,13 +5,30 @@ use image_io::read_image;
 use nalgebra;
 use nalgebra::DMatrix;
 
-fn get_pixel_clamped(img: &DMatrix<f32>, coord: (usize, usize)) -> f32 {
+fn get_pixel_clamped(img: &DMatrix<f32>, coord: (i64, i64)) -> f32 {
     let coord = (
-        coord.0.max(0).min(img.shape().0 - 1),
-        coord.1.max(0).min(img.shape().1 - 1),
+        (coord.0.max(0) as usize).min(img.shape().0 - 1),
+        (coord.1.max(0) as usize).min(img.shape().1 - 1),
     );
 
     img[coord]
+}
+
+fn grab_patch(img: &DMatrix<f32>, center: (usize, usize)) -> ImagePatch {
+    let mut patch: ImagePatch = ImagePatch::zeros();
+
+    let center = (center.0 as i64, center.1 as i64);
+    let margin = PATCH_MARGIN as i64;
+    let patch_size = PATCH_SIZE as i64;
+
+    for x in 0..patch_size {
+        for y in 0..patch_size {
+            patch[(x as usize, y as usize)] =
+                get_pixel_clamped(img, (center.0 + x - margin, center.1 + y - margin));
+        }
+    }
+
+    patch
 }
 
 fn lerp(s: f32, e: f32, t: f32) -> f32 {
@@ -37,8 +54,8 @@ fn bilinear_filter(img: &DMatrix<f32>, ideal_size: (usize, usize)) -> DMatrix<f3
         for j in 0..ideal_size.1 {
             let y = j as f32 * dy;
 
-            let i_x = x as usize;
-            let i_y = y as usize;
+            let i_x = x as i64;
+            let i_y = y as i64;
 
             let f_x = x - x.floor();
             let f_y = y - y.floor();
@@ -65,12 +82,14 @@ mod tests {
     use color::{from_ycbcr, to_ycbcr};
     use constants::*;
     use image_io::{read_image, write_image};
+    use nalgebra;
     use raisr::*;
 
     #[test]
     fn test_raisr() {
         //test_create_filter_image();
-        test_bilinear_filter_image();
+        //test_bilinear_filter_image();
+        test_patch();
     }
 
     fn test_create_filter_image() {
@@ -91,5 +110,16 @@ mod tests {
         let cr = bilinear_filter(&cr, (lr_dims.0, lr_dims.1));
         let (r, g, b) = from_ycbcr(&y, &cb, &cr);
         write_image("output/veronica_result.png", &(r, g, b));
+    }
+
+    fn test_patch() {
+        let mut img: DMatrix<f32> = nalgebra::DMatrix::zeros(50, 50);
+        for i in 0..50 {
+            for j in 0..50 {
+                img[(i, j)] = (f32::sin(i as f32) + f32::cos(i as f32)) as f32;
+            }
+        }
+
+        println!("Patch: {}", grab_patch(&img, (2, 2)));
     }
 }
