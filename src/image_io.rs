@@ -1,6 +1,7 @@
 use image;
 use image::GenericImage;
 use nalgebra::DMatrix;
+use std::fs;
 
 pub fn read_image(filename: &str) -> (DMatrix<f32>, DMatrix<f32>, DMatrix<f32>) {
     let img = image::open(filename).unwrap();
@@ -19,4 +20,25 @@ pub fn read_image(filename: &str) -> (DMatrix<f32>, DMatrix<f32>, DMatrix<f32>) 
     }
 
     (red, green, blue)
+}
+
+pub fn write_image(filename: &str, img: &(DMatrix<f32>, DMatrix<f32>, DMatrix<f32>)) {
+    if fs::metadata(filename).is_ok() {
+        fs::remove_file(filename).unwrap();
+    }
+
+    let to_u8 = |f| (f as f32 * 255.0) as u8;
+
+    let ref mut buffer =
+        image::ImageBuffer::from_fn(img.0.shape().0 as u32, img.0.shape().1 as u32, |x, y| {
+            let (x, y) = (x as usize, y as usize);
+            let pixel = [
+                to_u8(img.0[(x, y)]),
+                to_u8(img.1[(x, y)]),
+                to_u8(img.2[(x, y)]),
+            ];
+            image::Rgb(pixel)
+        });
+
+    buffer.save(filename).unwrap();
 }
