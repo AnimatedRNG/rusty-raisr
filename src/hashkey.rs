@@ -71,7 +71,7 @@ fn eigendecomposition(
     }
 }
 
-pub fn hashkey(block: &ImagePatch) -> (u8, u8, u8) {
+pub fn hashkey<T: From<u8> + Copy>(block: &ImagePatch) -> (T, T, T) {
     let (gy, gx) = sobel_filter(block);
     let gx: GradientVector = GradientVector::from_column_slice(gx.as_slice());
     let gy: GradientVector = GradientVector::from_column_slice(gy.as_slice());
@@ -112,28 +112,28 @@ pub fn hashkey(block: &ImagePatch) -> (u8, u8, u8) {
     };
 
     let angle = (theta / PI * Q_ANGLE as f32).floor();
-    let strength = if lambda < 0.0001 {
+    let strength: T = if lambda < 0.0001 {
         0
     } else if lambda > 0.001 {
         2
     } else {
         1
-    };
-    let coherence = if u < 0.25 {
+    }.into();
+    let coherence: T = if u < 0.25 {
         0
     } else if u > 0.5 {
         2
     } else {
         1
-    };
+    }.into();
 
-    let angle = if angle > 23.0 {
+    let angle: T = if angle > 23.0 {
         23
     } else if angle < 0.0 {
         0
     } else {
         angle as u8
-    };
+    }.into();
 
     (angle, strength, coherence)
 }
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn test_hashkey() {
         let mut patch = get_test_patch();
-        println!("Hash: {:?}", hashkey(&patch));
+        println!("Hash: {:?}", hashkey::<u8>(&patch));
     }
 
     #[test]
