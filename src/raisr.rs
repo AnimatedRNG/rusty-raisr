@@ -1,11 +1,15 @@
 use color::{from_ycbcr, to_ycbcr};
 use constants::*;
+use filters::FilterBank;
 use hashkey::hashkey;
 use image_io::read_image;
 use itertools::Itertools;
 use nalgebra;
 use nalgebra::DMatrix;
+use ndarray::prelude::*;
 use rayon::prelude::*;
+
+pub type FilterImage = (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>);
 
 fn get_pixel_clamped(img: &DMatrix<f_t>, coord: (i64, i64)) -> f_t {
     let coord = (
@@ -77,7 +81,7 @@ fn bilinear_filter(img: &DMatrix<f_t>, ideal_size: (usize, usize)) -> DMatrix<f_
     output_image
 }
 
-fn create_filter_image(hr_y: &DMatrix<f_t>) -> (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>) {
+fn create_filter_image(hr_y: &DMatrix<f_t>) -> FilterImage {
     let dims = hr_y.shape();
 
     let ideal_size = (dims.0, dims.1);
@@ -110,8 +114,47 @@ fn create_filter_image(hr_y: &DMatrix<f_t>) -> (DMatrix<u8>, DMatrix<u8>, DMatri
     (final_angle, final_strength, final_coherence)
 }
 
+fn inference(
+    hr_y: &DMatrix<f_t>,
+    filter_image: &FilterImage,
+    filter_bank: &FilterBank,
+) -> DMatrix<f_t> {
+    let ideal_size = (hr_y.shape().0, hr_y.shape().1);
+
+    let mut upscaled: DMatrix<f_t> = DMatrix::zeros(ideal_size.0, ideal_size.1);
+
+    let results: Vec<Vec<((usize, usize), f_t)>> = (0..ideal_size.0)
+        .into_par_iter()
+        .map(|x: usize| {
+            (0..ideal_size.1)
+                .map(|y: usize| {
+                    let angle = filter_image.0[(x, y)] as usize;
+                    let strength = filter_image.1[(x, y)] as usize;
+                    let coherence = filter_image.2[(x, y)] as usize;
+                    let pixel_type = (x % R) * R + y % R;
+                    let filter: Array1<f_t> = filter_bank
+                        .slice(s![angle, strength, coherence, pixel_type, ..])
+                        .to_owned();
+                    let patch_vec: Vec<f_t> =
+                        grab_patch(&hr_y, (x, y)).iter().map(|i| *i).collect();
+                    let patch_ND: Array1<f_t> = Array1::from_vec(patch_vec).to_owned();
+                    ((x, y), patch_ND.dot(&filter))
+                })
+                .collect()
+        })
+        .collect();
+
+    results.iter().foreach(|row| {
+        row.iter().foreach(|((x, y), value)| {
+            upscaled[(*x, *y)] = *value;
+        })
+    });
+
+    upscaled
+}
+
 fn to_float(m: &DMatrix<u8>, normalize: bool) -> DMatrix<f_t> {
-    m.map(|a| a as f32 / (if normalize { 255.0 } else { 1.0 }))
+    m.map(|a| a as f_t / (if normalize { 255.0 } else { 1.0 }))
 }
 
 fn to_byte(m: &DMatrix<f_t>) -> DMatrix<u8> {
@@ -124,9 +167,9 @@ fn debug_filter_image(
     coherence: &DMatrix<u8>,
 ) -> (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>) {
     (
-        to_byte(&(to_float(angle, false) / Q_ANGLE as f32)),
-        to_byte(&(to_float(strength, false) / Q_STRENGTH as f32)),
-        to_byte(&(to_float(coherence, false) / Q_COHERENCE as f32)),
+        to_byte(&(to_float(angle, false) / Q_ANGLE as f_t)),
+        to_byte(&(to_float(strength, false) / Q_STRENGTH as f_t)),
+        to_byte(&(to_float(coherence, false) / Q_COHERENCE as f_t)),
     )
 }
 

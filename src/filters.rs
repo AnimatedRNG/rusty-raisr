@@ -5,7 +5,7 @@ use ndarray::prelude::*;
 use std::fs;
 use std::io::Read;
 
-pub type FilterBank = ArrayD<f32>;
+pub type FilterBank = ArrayD<f_t>;
 
 pub fn read_filter(filename: &str) -> FilterBank {
     let reference = fs::File::open(filename).unwrap();
@@ -39,7 +39,7 @@ pub fn read_filter(filename: &str) -> FilterBank {
     {
         for i in 0..PATCH_VECTOR_SIZE {
             filter[[angle, strength, coherence, pixel_type, i]] =
-                LittleEndian::read_f32(&read_four_bytes());
+                LittleEndian::read_f32(&read_four_bytes()) as f_t;
             println!("{}", filter[[angle, strength, coherence, pixel_type, i]]);
         }
     }
