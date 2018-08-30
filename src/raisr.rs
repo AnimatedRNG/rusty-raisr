@@ -137,8 +137,8 @@ fn inference(
                         .to_owned();
                     let patch_vec: Vec<f_t> =
                         grab_patch(&hr_y, (x, y)).iter().map(|i| *i).collect();
-                    let patch_ND: Array1<f_t> = Array1::from_vec(patch_vec).to_owned();
-                    ((x, y), patch_ND.dot(&filter))
+                    let patch_nd: Array1<f_t> = Array1::from_vec(patch_vec).to_owned();
+                    ((x, y), patch_nd.dot(&filter))
                 })
                 .collect()
         })

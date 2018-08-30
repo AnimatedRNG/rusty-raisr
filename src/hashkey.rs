@@ -94,7 +94,7 @@ pub fn hashkey<T: From<u8> + Copy>(block: &ImagePatch) -> (T, T, T) {
         nalgebra::MatrixArray<f_t, GradientVectorSizeType, GradientVectorSizeType>,
     >;
 
-    let weights_diag = WType::from_diagonal(&GradientVector::from_row_slice(&weights));
+    let weights_diag = WType::from_diagonal(&GradientVector::from_row_slice(&WEIGHTS));
 
     let gtwg = g.transpose() * weights_diag * g;
     let (w, v) = eigendecomposition(&gtwg);

@@ -1,6 +1,5 @@
 use byteorder::{ByteOrder, LittleEndian};
 use constants::*;
-use itertools;
 use ndarray::prelude::*;
 use std::fs;
 use std::io::Read;
