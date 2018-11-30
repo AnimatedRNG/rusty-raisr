@@ -4,13 +4,13 @@ version = "0.1.0"
 authors = ["Srinivas Kaza <srinivas@kaza.io>"]
 
 [dependencies]
-nalgebra = "0.16.0"
+nalgebra = "0.16.10"
 image = "0.19.0"
 rayon = "1.0.2"
 itertools = "*"
-cpython = "*"
-ndarray = { version = "0.11.0", features = ["blas"] }
+num = "*"
+flate2 = "1.0"
+ndarray = { version = "0.11.0", features = ["blas-src"] }
 blas-src = { version = "0.2.0", default-features = false, features = ["openblas"] }
 openblas-src = { version = "0.6.0", default-features = false, features = ["cblas", "system"] }
 byteorder = "1.2.4"
-#torchrs = { git = "https://github.com/torchrs/torchrs.git" }
