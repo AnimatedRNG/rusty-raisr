@@ -9,7 +9,7 @@ use rayon::prelude::*;
 
 pub type FilterImage = (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>);
 
-fn get_pixel_clamped(img: &DMatrix<f_t>, coord: (i64, i64)) -> f_t {
+fn get_pixel_clamped(img: &DMatrix<FloatType>, coord: (i64, i64)) -> FloatType {
     let coord = (
         (coord.0.max(0) as usize).min(img.shape().0 - 1),
         (coord.1.max(0) as usize).min(img.shape().1 - 1),
@@ -18,7 +18,7 @@ fn get_pixel_clamped(img: &DMatrix<f_t>, coord: (i64, i64)) -> f_t {
     img[coord]
 }
 
-fn grab_patch(img: &DMatrix<f_t>, center: (usize, usize)) -> ImagePatch {
+fn grab_patch(img: &DMatrix<FloatType>, center: (usize, usize)) -> ImagePatch {
     let mut patch: ImagePatch = ImagePatch::zeros();
 
     let center = (center.0 as i64, center.1 as i64);
@@ -35,11 +35,14 @@ fn grab_patch(img: &DMatrix<f_t>, center: (usize, usize)) -> ImagePatch {
     patch
 }
 
-fn lerp(s: f_t, e: f_t, t: f_t) -> f_t {
+fn lerp(s: FloatType, e: FloatType, t: FloatType) -> FloatType {
     s + (e - s) * t
 }
 
-fn blerp(block: &nalgebra::Matrix2<f_t>, b_interp: &nalgebra::Vector2<f_t>) -> f_t {
+fn blerp(
+    block: &nalgebra::Matrix2<FloatType>,
+    b_interp: &nalgebra::Vector2<FloatType>,
+) -> FloatType {
     lerp(
         lerp(block[(0, 0)], block[(0, 1)], b_interp[0]),
         lerp(block[(1, 0)], block[(1, 1)], b_interp[0]),
@@ -47,16 +50,16 @@ fn blerp(block: &nalgebra::Matrix2<f_t>, b_interp: &nalgebra::Vector2<f_t>) -> f
     )
 }
 
-fn bilinear_filter(img: &DMatrix<f_t>, ideal_size: (usize, usize)) -> DMatrix<f_t> {
-    let dx = img.shape().0 as f_t / ideal_size.0 as f_t;
-    let dy = img.shape().1 as f_t / ideal_size.1 as f_t;
+fn bilinear_filter(img: &DMatrix<FloatType>, ideal_size: (usize, usize)) -> DMatrix<FloatType> {
+    let dx = img.shape().0 as FloatType / ideal_size.0 as FloatType;
+    let dy = img.shape().1 as FloatType / ideal_size.1 as FloatType;
 
     let mut output_image = DMatrix::zeros(ideal_size.0, ideal_size.1);
 
     for i in 0..ideal_size.0 {
-        let x = i as f_t * dx;
+        let x = i as FloatType * dx;
         for j in 0..ideal_size.1 {
-            let y = j as f_t * dy;
+            let y = j as FloatType * dy;
 
             let i_x = x as i64;
             let i_y = y as i64;
@@ -79,7 +82,7 @@ fn bilinear_filter(img: &DMatrix<f_t>, ideal_size: (usize, usize)) -> DMatrix<f_
     output_image
 }
 
-fn create_filter_image(hr_y: &DMatrix<f_t>) -> FilterImage {
+fn create_filter_image(hr_y: &DMatrix<FloatType>) -> FilterImage {
     let dims = hr_y.shape();
 
     let ideal_size = (dims.0, dims.1);
@@ -113,16 +116,16 @@ fn create_filter_image(hr_y: &DMatrix<f_t>) -> FilterImage {
 }
 
 fn inference(
-    hr_y: &DMatrix<f_t>,
+    hr_y: &DMatrix<FloatType>,
     filter_image: &FilterImage,
     filter_bank: &FilterBank,
-) -> DMatrix<f_t> {
+) -> DMatrix<FloatType> {
     let ideal_size = (hr_y.shape().0, hr_y.shape().1);
     let margin = PATCH_MARGIN;
 
-    let mut upscaled: DMatrix<f_t> = DMatrix::zeros(ideal_size.0, ideal_size.1);
+    let mut upscaled: DMatrix<FloatType> = DMatrix::zeros(ideal_size.0, ideal_size.1);
 
-    let results: Vec<Vec<((usize, usize), f_t)>> = (0..ideal_size.0)
+    let results: Vec<Vec<((usize, usize), FloatType)>> = (0..ideal_size.0)
         .into_par_iter()
         .map(|x: usize| {
             (0..ideal_size.1)
@@ -131,15 +134,15 @@ fn inference(
                     let strength = filter_image.1[(x, y)] as usize;
                     let coherence = filter_image.2[(x, y)] as usize;
                     let pixel_type = ((x - margin) % R) * R + (y - margin) % R;
-                    let filter: ArrayView1<f_t> =
+                    let filter: ArrayView1<FloatType> =
                         filter_bank.slice(s![angle, strength, coherence, pixel_type, ..]);
                     let patch = grab_patch(&hr_y, (x, y)).transpose();
-                    let patch_slice: &[f_t] = patch.as_slice();
+                    let patch_slice: &[FloatType] = patch.as_slice();
                     let patch_nd = ArrayView::from_shape((121,), patch_slice).unwrap();
 
                     (
                         (x, y),
-                        f_t::min(f_t::max(patch_nd.dot(&filter), 1e-6), 1.0 - 1e-6),
+                        FloatType::min(FloatType::max(patch_nd.dot(&filter), 1e-6), 1.0 - 1e-6),
                     )
                 })
                 .collect()
@@ -163,11 +166,11 @@ mod tests {
     use image_io::{read_image, write_image, write_image_u8};
     use raisr::*;
 
-    fn to_float(m: &DMatrix<u8>, normalize: bool) -> DMatrix<f_t> {
-        m.map(|a| a as f_t / (if normalize { 255.0 } else { 1.0 }))
+    fn to_float(m: &DMatrix<u8>, normalize: bool) -> DMatrix<FloatType> {
+        m.map(|a| a as FloatType / (if normalize { 255.0 } else { 1.0 }))
     }
 
-    fn to_byte(m: &DMatrix<f_t>) -> DMatrix<u8> {
+    fn to_byte(m: &DMatrix<FloatType>) -> DMatrix<u8> {
         m.map(|a| (a * 255.0) as u8)
     }
 
@@ -177,9 +180,9 @@ mod tests {
         coherence: &DMatrix<u8>,
     ) -> (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>) {
         (
-            to_byte(&(to_float(angle, false) / Q_ANGLE as f_t)),
-            to_byte(&(to_float(strength, false) / Q_STRENGTH as f_t)),
-            to_byte(&(to_float(coherence, false) / Q_COHERENCE as f_t)),
+            to_byte(&(to_float(angle, false) / Q_ANGLE as FloatType)),
+            to_byte(&(to_float(strength, false) / Q_STRENGTH as FloatType)),
+            to_byte(&(to_float(coherence, false) / Q_COHERENCE as FloatType)),
         )
     }
 

@@ -5,10 +5,10 @@ use std::f64::consts::PI;
 use std::fmt::{Debug, Display};
 
 type WeightsType = nalgebra::Matrix<
-    f_t,
+    FloatType,
     GradientVectorSizeType,
     GradientVectorSizeType,
-    nalgebra::MatrixArray<f_t, GradientVectorSizeType, GradientVectorSizeType>,
+    nalgebra::MatrixArray<FloatType, GradientVectorSizeType, GradientVectorSizeType>,
 >;
 
 fn sobel_filter(input: &ImagePatch) -> (GradientBlock, GradientBlock) {
@@ -47,8 +47,8 @@ fn sobel_filter(input: &ImagePatch) -> (GradientBlock, GradientBlock) {
 // That's because we need to maintain compatibility with my changes
 // to movehand's code which uses Python floats (i.e f64) along with
 // numpy arrays that are f32.
-fn eigendecomposition<T: 'static + From<f_t> + Float + Debug + Display>(
-    m: &nalgebra::Matrix2<f_t>,
+fn eigendecomposition<T: 'static + From<FloatType> + Float + Debug + Display>(
+    m: &nalgebra::Matrix2<FloatType>,
 ) -> (nalgebra::Vector2<T>, nalgebra::Matrix2<T>) {
     let (a, b, c, d) = (
         cast(m[(0, 0)]).unwrap(),
@@ -107,10 +107,10 @@ pub fn hashkey<T: From<u8> + Copy>(block: &ImagePatch) -> (T, T, T) {
     let gy: GradientVector = GradientVector::from_column_slice(gy.as_slice());
 
     type GType = nalgebra::Matrix<
-        f_t,
+        FloatType,
         GradientVectorSizeType,
         nalgebra::U2,
-        nalgebra::MatrixArray<f_t, GradientVectorSizeType, nalgebra::U2>,
+        nalgebra::MatrixArray<FloatType, GradientVectorSizeType, nalgebra::U2>,
     >;
 
     let mut g = GType::zeros();
@@ -182,10 +182,11 @@ mod tests {
     use std::io::BufReader;
 
     fn get_test_patch() -> ImagePatch {
-        let mut patch: [f_t; PATCH_SIZE * PATCH_SIZE] = [0.0; PATCH_SIZE * PATCH_SIZE];
+        let mut patch: [FloatType; PATCH_SIZE * PATCH_SIZE] = [0.0; PATCH_SIZE * PATCH_SIZE];
         for x in 0..PATCH_SIZE {
             for y in 0..PATCH_SIZE {
-                patch[x * PATCH_SIZE + y] = f_t::cos(x as f_t) * f_t::sin(y as f_t);
+                patch[x * PATCH_SIZE + y] =
+                    FloatType::cos(x as FloatType) * FloatType::sin(y as FloatType);
             }
         }
         ImagePatch::from_row_slice(&patch).transpose() / 5.0
@@ -200,7 +201,7 @@ mod tests {
 
     #[test]
     fn test_pathological_case() {
-        let patch_arr: [f_t; 121] = [
+        let patch_arr: [FloatType; 121] = [
             0.2509804, 0.25490198, 0.25882354, 0.2627451, 0.26666668, 0.27058825, 0.27450982,
             0.2784314, 0.28235295, 0.28627455, 0.29019612, 0.25490198, 0.25882354, 0.2627451,
             0.26666668, 0.27058825, 0.27450982, 0.2784314, 0.28235298, 0.28627455, 0.29019612,
@@ -255,7 +256,7 @@ mod tests {
             let patch_str = patch_str.replace("[", "");
             let patch_str = patch_str.replace("]", "");
             let patch_str = patch_str.replace(" ", "");
-            let mut patch: Vec<f_t> = patch_str
+            let mut patch: Vec<FloatType> = patch_str
                 .split(",")
                 .map(|a| str::parse(a).unwrap())
                 .collect();
