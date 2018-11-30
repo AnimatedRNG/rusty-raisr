@@ -28,7 +28,7 @@ pub fn write_image(filename: &str, img: &(DMatrix<f_t>, DMatrix<f_t>, DMatrix<f_
         fs::remove_file(filename).unwrap();
     }
 
-    let to_u8 = |f| (f as f_t * 255.0) as u8;
+    let to_u8 = |f| (f_t::min(f_t::max(f, 0.0), 1.0) * 255.0) as u8;
 
     let ref mut buffer =
         image::ImageBuffer::from_fn(img.0.shape().1 as u32, img.0.shape().0 as u32, |x, y| {
