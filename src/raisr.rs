@@ -1,8 +1,6 @@
-use color::{from_ycbcr, to_ycbcr};
 use constants::*;
 use filters::FilterBank;
 use hashkey::hashkey;
-use image_io::read_image;
 use itertools::Itertools;
 use nalgebra;
 use nalgebra::DMatrix;
@@ -120,6 +118,7 @@ fn inference(
     filter_bank: &FilterBank,
 ) -> DMatrix<f_t> {
     let ideal_size = (hr_y.shape().0, hr_y.shape().1);
+    let margin = PATCH_MARGIN;
 
     let mut upscaled: DMatrix<f_t> = DMatrix::zeros(ideal_size.0, ideal_size.1);
 
@@ -131,14 +130,17 @@ fn inference(
                     let angle = filter_image.0[(x, y)] as usize;
                     let strength = filter_image.1[(x, y)] as usize;
                     let coherence = filter_image.2[(x, y)] as usize;
-                    let pixel_type = (x % R) * R + y % R;
-                    let filter: Array1<f_t> = filter_bank
-                        .slice(s![angle, strength, coherence, pixel_type, ..])
-                        .to_owned();
-                    let patch_vec: Vec<f_t> =
-                        grab_patch(&hr_y, (x, y)).iter().map(|i| *i).collect();
-                    let patch_nd: Array1<f_t> = Array1::from_vec(patch_vec).to_owned();
-                    ((x, y), patch_nd.dot(&filter))
+                    let pixel_type = ((x - margin) % R) * R + (y - margin) % R;
+                    let filter: ArrayView1<f_t> =
+                        filter_bank.slice(s![angle, strength, coherence, pixel_type, ..]);
+                    let patch = grab_patch(&hr_y, (x, y)).transpose();
+                    let patch_slice: &[f_t] = patch.as_slice();
+                    let patch_nd = ArrayView::from_shape((121,), patch_slice).unwrap();
+
+                    (
+                        (x, y),
+                        f_t::min(f_t::max(patch_nd.dot(&filter), 1e-6), 1.0 - 1e-6),
+                    )
                 })
                 .collect()
         })
@@ -153,40 +155,42 @@ fn inference(
     upscaled
 }
 
-fn to_float(m: &DMatrix<u8>, normalize: bool) -> DMatrix<f_t> {
-    m.map(|a| a as f_t / (if normalize { 255.0 } else { 1.0 }))
-}
-
-fn to_byte(m: &DMatrix<f_t>) -> DMatrix<u8> {
-    m.map(|a| (a * 255.0) as u8)
-}
-
-fn debug_filter_image(
-    angle: &DMatrix<u8>,
-    strength: &DMatrix<u8>,
-    coherence: &DMatrix<u8>,
-) -> (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>) {
-    (
-        to_byte(&(to_float(angle, false) / Q_ANGLE as f_t)),
-        to_byte(&(to_float(strength, false) / Q_STRENGTH as f_t)),
-        to_byte(&(to_float(coherence, false) / Q_COHERENCE as f_t)),
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use color::{from_ycbcr, to_ycbcr};
     use constants::*;
+    use filters::*;
     use image_io::{read_image, write_image, write_image_u8};
-    use nalgebra;
     use raisr::*;
+
+    fn to_float(m: &DMatrix<u8>, normalize: bool) -> DMatrix<f_t> {
+        m.map(|a| a as f_t / (if normalize { 255.0 } else { 1.0 }))
+    }
+
+    fn to_byte(m: &DMatrix<f_t>) -> DMatrix<u8> {
+        m.map(|a| (a * 255.0) as u8)
+    }
+
+    fn debug_filter_image(
+        angle: &DMatrix<u8>,
+        strength: &DMatrix<u8>,
+        coherence: &DMatrix<u8>,
+    ) -> (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>) {
+        (
+            to_byte(&(to_float(angle, false) / Q_ANGLE as f_t)),
+            to_byte(&(to_float(strength, false) / Q_STRENGTH as f_t)),
+            to_byte(&(to_float(coherence, false) / Q_COHERENCE as f_t)),
+        )
+    }
 
     #[test]
     fn test_raisr() {
-        //test_create_filter_image();
-        //test_bilinear_filter_image();
-        //test_patch();
+        test_create_filter_image();
+        test_bilinear_filter_image();
+        test_patch();
         test_hash_image();
+        test_apply_filter();
+        test_inference();
     }
 
     fn test_create_filter_image() {
@@ -210,19 +214,44 @@ mod tests {
     }
 
     fn test_patch() {
-        let img = read_image("test/Fallout.jpg");
+        let img = read_image("test/Fallout.png");
         let (r, g, b) = img;
-        let (y, cb, cr) = to_ycbcr(&r, &g, &b);
+        let (y, _, _) = to_ycbcr(&r, &g, &b);
         let dims = y.shape();
         let ideal_size = (dims.0 * R, dims.1 * R);
         let hr_y = bilinear_filter(&y, ideal_size);
-        let patch = grab_patch(&hr_y, (300, 250));
+        let patch = grab_patch(&hr_y, (100, 240));
 
         println!("Patch: {}", patch);
     }
 
     fn test_hash_image() {
-        let img = read_image("test/Fallout.jpg");
+        let img = read_image("test/Fallout.png");
+
+        let (r, g, b) = img;
+        let (y, _, _) = to_ycbcr(&r, &g, &b);
+
+        let dims = y.shape();
+
+        let ideal_size = (dims.0 * R, dims.1 * R);
+
+        let hr_y = bilinear_filter(&y, ideal_size);
+
+        let filter_image = create_filter_image(&hr_y);
+        let debug = debug_filter_image(&filter_image.0, &filter_image.1, &filter_image.2);
+
+        write_image_u8("output/Fallout_hashimg.png", &debug);
+    }
+
+    fn test_apply_filter() {
+        let filter_img_raw = read_image("test/Fallout_filters.png");
+        let img = read_image("test/Fallout.png");
+
+        let filter_img: FilterImage = (
+            (filter_img_raw.0 * Q_ANGLE as f32).map(|f| f as u8),
+            (filter_img_raw.1 * Q_STRENGTH as f32).map(|f| f as u8),
+            (filter_img_raw.2 * Q_COHERENCE as f32).map(|f| f as u8),
+        );
 
         let (r, g, b) = img;
         let (y, cb, cr) = to_ycbcr(&r, &g, &b);
@@ -232,16 +261,35 @@ mod tests {
         let ideal_size = (dims.0 * R, dims.1 * R);
 
         let hr_y = bilinear_filter(&y, ideal_size);
-        //let hr_cb = bilinear_filter(&cb, ideal_size);
-        //let hr_cr = bilinear_filter(&cr, ideal_size);
+        let hr_cb = bilinear_filter(&cb, ideal_size);
+        let hr_cr = bilinear_filter(&cr, ideal_size);
+
+        let debug = debug_filter_image(&filter_img.0, &filter_img.1, &filter_img.2);
+        let inferred_y = inference(&hr_y, &filter_img, &read_filter("filters/filterbank"));
+        let new_rgb = from_ycbcr(&inferred_y, &hr_cb, &hr_cr);
+        write_image("output/Fallout_inferred.png", &new_rgb);
+        write_image_u8("output/Fallout_hashimg.png", &debug);
+    }
+
+    fn test_inference() {
+        let img = read_image("test/Fallout.png");
+
+        let (r, g, b) = img;
+        let (y, cb, cr) = to_ycbcr(&r, &g, &b);
+
+        let dims = y.shape();
+
+        let ideal_size = (dims.0 * R, dims.1 * R);
+
+        let hr_y = bilinear_filter(&y, ideal_size);
+        let hr_cb = bilinear_filter(&cb, ideal_size);
+        let hr_cr = bilinear_filter(&cr, ideal_size);
 
         let filter_image = create_filter_image(&hr_y);
-        let empty = DMatrix::<u8>::zeros(filter_image.0.shape().0, filter_image.0.shape().1);
         let debug = debug_filter_image(&filter_image.0, &filter_image.1, &filter_image.2);
-        //let debug = debug_filter_image(&filter_image.0, &empty, &empty.clone());
-        //let debug = (hr_y.clone(), hr_y.clone(), hr_y.clone());
-
-        write_image_u8("output/Fallout_result.png", &debug);
-        //write_image("output/Fallout_result.png", &debug);
+        let inferred_y = inference(&hr_y, &filter_image, &read_filter("filters/filterbank"));
+        let new_rgb = from_ycbcr(&inferred_y, &hr_cb, &hr_cr);
+        write_image("output/Fallout_inferred.png", &new_rgb);
+        write_image_u8("output/Fallout_hashimg.png", &debug);
     }
 }
