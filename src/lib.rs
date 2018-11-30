@@ -6,6 +6,7 @@ extern crate rayon;
 #[macro_use]
 extern crate ndarray;
 extern crate byteorder;
+extern crate num;
 
 pub mod color;
 pub mod constants;
