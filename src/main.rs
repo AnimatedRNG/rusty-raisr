@@ -45,14 +45,11 @@ fn main() {
         .get_matches();
 
     let filterbank_name: String = matches.value_of("filterbank").unwrap().to_owned();
-    println!("Filterbank: {}", filterbank_name);
 
     let input_image_name: String = matches.value_of("input").unwrap().to_owned();
-    println!("Input: {}", input_image_name);
     let input_image = read_image(&input_image_name);
 
     let output_image_name: String = matches.value_of("output").unwrap().to_owned();
-    println!("Output: {}", output_image_name);
 
     let (r, g, b) = input_image;
     let (y, cb, cr) = to_ycbcr(&r, &g, &b);
