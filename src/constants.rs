@@ -1,5 +1,4 @@
 use nalgebra;
-use ndarray::prelude::*;
 
 pub type f_t = f32;
 
