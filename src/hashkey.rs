@@ -1,7 +1,8 @@
 use constants::*;
 use nalgebra;
-use std::cmp::max;
+use num::{cast, Float};
 use std::f64::consts::PI;
+use std::fmt::{Debug, Display};
 
 type WeightsType = nalgebra::Matrix<
     f_t,
@@ -16,6 +17,9 @@ fn sobel_filter(input: &ImagePatch) -> (GradientBlock, GradientBlock) {
     let vertical_filter =
         nalgebra::Matrix3::new(-1.0, -2.0, -1.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0).transpose();
 
+    // TODO: I wrote out the entire filter so that I could guarantee that it
+    // was doing what the Python implementation was doing. This section
+    // can totally be rewritten for performance.
     let mut g_x: GradientBlock = GradientBlock::zeros();
     let mut g_y: GradientBlock = GradientBlock::zeros();
     for x in 1..PATCH_SIZE - 1 {
@@ -39,33 +43,59 @@ fn sobel_filter(input: &ImagePatch) -> (GradientBlock, GradientBlock) {
     (g_x, g_y)
 }
 
-fn eigendecomposition(
+// TODO: Currently there's a lot of casting happening in this function!
+// That's because we need to maintain compatibility with my changes
+// to movehand's code which uses Python floats (i.e f64) along with
+// numpy arrays that are f32.
+fn eigendecomposition<T: 'static + From<f_t> + Float + Debug + Display>(
     m: &nalgebra::Matrix2<f_t>,
-) -> (nalgebra::Vector2<f_t>, nalgebra::Matrix2<f_t>) {
-    let (a, b, c, d) = (m[(0, 0)], m[(0, 1)], m[(1, 0)], m[(1, 1)]);
-    if b * c <= 1e-20 {
+) -> (nalgebra::Vector2<T>, nalgebra::Matrix2<T>) {
+    let (a, b, c, d) = (
+        cast(m[(0, 0)]).unwrap(),
+        cast(m[(0, 1)]).unwrap(),
+        cast(m[(1, 0)]).unwrap(),
+        cast(m[(1, 1)]).unwrap(),
+    );
+    if b * c <= cast(1e-20).unwrap() {
         (
             nalgebra::Vector2::new(a, d),
-            nalgebra::Matrix2::new(1.0, 0.0, 0.0, 1.0),
+            nalgebra::Matrix2::new(
+                cast(1.0).unwrap(),
+                cast(0.0).unwrap(),
+                cast(0.0).unwrap(),
+                cast(1.0).unwrap(),
+            ),
         )
     } else {
         let tr = a + d;
         let det = a * d - b * c;
-        let s = ((tr / 2.0).powf(2.0) - det).sqrt();
-        let lamb = nalgebra::Vector2::new(tr / 2.0 + s, tr / 2.0 - s);
+        let s = ((tr / cast(2.0).unwrap()).powf(cast(2.0).unwrap()) - det).sqrt();
+        let lamb = nalgebra::Vector2::new(tr / cast(2.0).unwrap() + s, tr / cast(2.0).unwrap() - s);
 
-        let ss = (((a - d) / 2.0).powi(2) + b * c).max(0.0).sqrt();
-        let mut ev: nalgebra::Matrix2<f_t> = if a - d < 0.0 {
-            nalgebra::Matrix2::new(c, (a - d) / 2.0 - ss, -(a - d) / 2.0 + ss, b)
+        let ss = (((a - d) / cast(2.0).unwrap()).powi(2) + b * c)
+            .max(cast(0.0).unwrap())
+            .sqrt();
+        let mut ev = if a - d < cast(0.0).unwrap() {
+            nalgebra::Matrix2::new(
+                c,
+                (a - d) / cast(2.0).unwrap() - ss,
+                -(a - d) / cast(2.0).unwrap() + ss,
+                b,
+            )
         } else {
-            nalgebra::Matrix2::new((a - d) / 2.0 + ss, c, b, -(a - d) / 2.0 - ss)
+            nalgebra::Matrix2::new(
+                (a - d) / cast(2.0).unwrap() + ss,
+                c,
+                b,
+                -(a - d) / cast(2.0).unwrap() - ss,
+            )
         };
 
         let n1 = (ev[(0, 0)].powi(2) + ev[(0, 1)].powi(2)).sqrt();
-        ev[0] /= n1;
+        ev[0] = ev[0] / n1;
 
         let n2 = (ev[(1, 0)].powi(2) + ev[(1, 1)].powi(2)).sqrt();
-        ev[1] /= n2;
+        ev[1] = ev[1] / n2;
 
         (lamb, ev)
     }
@@ -87,49 +117,47 @@ pub fn hashkey<T: From<u8> + Copy>(block: &ImagePatch) -> (T, T, T) {
     g.set_column(0, &gx);
     g.set_column(1, &gy);
 
-    type WType = nalgebra::Matrix<
-        f_t,
-        GradientVectorSizeType,
-        GradientVectorSizeType,
-        nalgebra::MatrixArray<f_t, GradientVectorSizeType, GradientVectorSizeType>,
-    >;
-
-    let weights_diag = WType::from_diagonal(&GradientVector::from_row_slice(&WEIGHTS));
+    let weights_diag = WeightsType::from_diagonal(&GradientVector::from_row_slice(&WEIGHTS));
 
     let gtwg = g.transpose() * weights_diag * g;
-    let (w, v) = eigendecomposition(&gtwg);
+    let wv: (nalgebra::Vector2<f64>, nalgebra::Matrix2<f64>) = eigendecomposition(&gtwg);
+    let (w, v) = wv;
 
-    let theta = f_t::atan2(v[(1, 0)], v[(0, 0)]);
-    let theta = if theta < 0.0 {
-        theta + PI as f_t
-    } else {
-        theta
-    };
+    let theta = f64::atan2(v[(1, 0)], v[(0, 0)]);
+    let theta = if theta < 0.0 { theta + PI } else { theta };
     let lambda = w[0];
 
     let sqrtlambda1 = w[0].sqrt();
     let sqrtlambda2 = w[1].sqrt();
     let u = if sqrtlambda1 + sqrtlambda2 == 0.0 {
         0.0
+    } else if w[0] < 0.0 || w[1] < 0.0 {
+        // TODO: Eventually eliminate this case once the training process
+        // is in pure Rust. Currently only kept for compatibility with
+        // movehand's implementation (numpy handles negative sqrt
+        // differently than Rust).
+        0.33
     } else {
         (sqrtlambda1 - sqrtlambda2) / (sqrtlambda1 + sqrtlambda2)
     };
 
-    let angle = (theta / PI as f_t * Q_ANGLE as f_t).floor();
+    let angle = (theta / PI * Q_ANGLE as f64).floor();
     let strength: T = if lambda < 0.0001 {
         0
     } else if lambda > 0.001 {
         2
     } else {
         1
-    }.into();
+    }
+    .into();
     let coherence: T = if u < 0.25 {
         0
     } else if u > 0.5 {
         2
     } else {
         1
-    }.into();
+    }
+    .into();
 
     let angle: T = if angle > 23.0 {
         23
@@ -137,21 +165,21 @@ pub fn hashkey<T: From<u8> + Copy>(block: &ImagePatch) -> (T, T, T) {
         0
     } else {
         angle as u8
-    }.into();
+    }
+    .into();
 
     (angle, strength, coherence)
 }
 
 #[cfg(test)]
 mod tests {
-    extern crate cpython;
-
-    use self::cpython::{PyDict, PyResult, Python};
     use constants::*;
+    use flate2::read::GzDecoder;
     use hashkey::*;
     use nalgebra;
     use std::fs;
-    use std::io::{BufRead, BufReader};
+    use std::io::prelude::*;
+    use std::io::BufReader;
 
     fn get_test_patch() -> ImagePatch {
         let mut patch: [f_t; PATCH_SIZE * PATCH_SIZE] = [0.0; PATCH_SIZE * PATCH_SIZE];
@@ -165,47 +193,75 @@ mod tests {
 
     #[test]
     fn test_sobel() {
-        let mut patch = get_test_patch();
+        let patch = get_test_patch();
         println!("Patch: {}", patch);
         println!("Sobel: {}", sobel_filter(&patch).0);
     }
 
     #[test]
+    fn test_pathological_case() {
+        let patch_arr: [f_t; 121] = [
+            0.2509804, 0.25490198, 0.25882354, 0.2627451, 0.26666668, 0.27058825, 0.27450982,
+            0.2784314, 0.28235295, 0.28627455, 0.29019612, 0.25490198, 0.25882354, 0.2627451,
+            0.26666668, 0.27058825, 0.27450982, 0.2784314, 0.28235298, 0.28627455, 0.29019612,
+            0.2941177, 0.25882354, 0.2627451, 0.26666668, 0.27058825, 0.27450982, 0.2784314,
+            0.28235295, 0.28627455, 0.29019612, 0.2941177, 0.29803923, 0.2627451, 0.26666668,
+            0.27058825, 0.27450982, 0.2784314, 0.28235298, 0.28627455, 0.2911765, 0.29607844, 0.3,
+            0.30392158, 0.26666668, 0.27058825, 0.27450982, 0.2784314, 0.28235295, 0.28627455,
+            0.29019612, 0.29607844, 0.3019608, 0.3058824, 0.30980396, 0.27058825, 0.27450982,
+            0.2784314, 0.28235298, 0.28627455, 0.2911765, 0.29607844, 0.30098042, 0.3058824,
+            0.30980396, 0.31372553, 0.27450982, 0.2784314, 0.28235295, 0.28627455, 0.29019612,
+            0.29607844, 0.3019608, 0.3058824, 0.30980396, 0.31372553, 0.31764707, 0.2784314,
+            0.28235298, 0.28627455, 0.2911765, 0.29607844, 0.30098042, 0.3058824, 0.30980396,
+            0.31372553, 0.31862748, 0.32352942, 0.28235295, 0.28627455, 0.29019612, 0.29607844,
+            0.3019608, 0.3058824, 0.30980396, 0.31372553, 0.31764707, 0.32352942, 0.32941177,
+            0.28627455, 0.29019612, 0.2941177, 0.30000004, 0.3058824, 0.30980396, 0.31372553,
+            0.31862748, 0.32352942, 0.32843137, 0.33333334, 0.29019612, 0.2941177, 0.29803923,
+            0.30392158, 0.30980396, 0.31372553, 0.31764707, 0.32352942, 0.32941177, 0.33333334,
+            0.3372549,
+        ];
+
+        let patch: ImagePatch = ImagePatch::from_row_slice(&patch_arr);
+
+        // Annoying floating-point imprecision issues (when compared to numpy)
+        // cause issues here :/ . This case sits right at a bucket boundary.
+        let result = hashkey::<u8>(&patch);
+        println!("{}", result.0);
+    }
+
+    #[test]
+    fn test_white_case() {
+        let patch: ImagePatch = ImagePatch::repeat(1.0 - 1e-6);
+        println!("patch: {}", patch);
+        let result = hashkey::<u8>(&patch);
+        println!("{:?}", result);
+    }
+
+    #[test]
     fn test_hashkey() {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-
-        let locals = PyDict::new(py);
-        locals
-            .set_item(py, "random", py.import("random").unwrap())
-            .unwrap();
-        py.eval("random.seed(1234)", None, Some(&locals)).unwrap();
-        let rng = || {
-            py.eval("random.random()", None, Some(&locals))
-                .unwrap()
-                .extract::<f32>(py)
-                .unwrap()
-        };
-        let create_image = || {
-            let mut mat: ImagePatch = ImagePatch::zeros();
-            for i in 0..11 {
-                for j in 0..11 {
-                    mat[(i, j)] = rng();
-                }
-            }
-            mat
-        };
-
-        let reference = fs::File::open("reference/hash_reference.txt").unwrap();
+        let reference = fs::File::open("reference/hash_reference.txt.gz").unwrap();
         let reference = BufReader::new(&reference);
+        let mut decoder = GzDecoder::new(reference);
+        let mut reference = String::new();
+        decoder.read_to_string(&mut reference).unwrap();
 
+        // Load the reference data
         for line in reference.lines() {
-            let mut patch = create_image();
-            let reference_values: Vec<u8> = line
-                .unwrap()
-                .split(" ")
+            let patch_str_index = line.find(']').unwrap() + 1;
+            let (patch_str, line) = (
+                line[..patch_str_index].to_owned(),
+                line[patch_str_index + 1..].to_owned(),
+            );
+            let patch_str = patch_str.replace("[", "");
+            let patch_str = patch_str.replace("]", "");
+            let patch_str = patch_str.replace(" ", "");
+            let mut patch: Vec<f_t> = patch_str
+                .split(",")
                 .map(|a| str::parse(a).unwrap())
                 .collect();
+            let patch = ImagePatch::from_row_slice(&patch);
+            let reference_values: Vec<u8> =
+                line.split(" ").map(|a| str::parse(a).unwrap()).collect();
             assert!(reference_values.len() == 3);
             let (a, s, c) = (
                 reference_values[0],
@@ -213,26 +269,30 @@ mod tests {
                 reference_values[2],
             );
             let hash = hashkey::<u8>(&patch);
-            assert!(hash == (a, s, c));
+
+            println!("patch: {}", patch);
 
             println!("Hash: {:?}", hash);
-            println!("Reference values: {:?}", reference_values);
+            println!("Reference values: {:?}\n\n\n", reference_values);
+
+            assert!(hash == (a, s, c));
         }
     }
 
     #[test]
     fn test_eigendecomposition() {
+        // TODO: Add a more comprehensive set of tests.
         println!(
             "{:?}",
-            eigendecomposition(&nalgebra::Matrix2::new(1.0, 2.0, 2.0, 3.0))
+            eigendecomposition::<f64>(&nalgebra::Matrix2::new(1.0, 2.0, 2.0, 3.0))
         );
         println!(
             "{:?}",
-            eigendecomposition(&nalgebra::Matrix2::new(3.0, 5.0, 5.0, 2.0))
+            eigendecomposition::<f64>(&nalgebra::Matrix2::new(3.0, 5.0, 5.0, 2.0))
         );
         println!(
             "{:?}",
-            eigendecomposition(&nalgebra::Matrix2::new(5.0, 3.0, 3.0, 2.0))
+            eigendecomposition::<f64>(&nalgebra::Matrix2::new(5.0, 3.0, 3.0, 2.0))
         );
     }
 }
