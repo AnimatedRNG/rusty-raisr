@@ -27,11 +27,13 @@ pub fn read_filter(filename: &str) -> FilterBank {
     let q_strength: usize = LittleEndian::read_u32(&read_four_bytes()) as usize;
     let q_coherence: usize = LittleEndian::read_u32(&read_four_bytes()) as usize;
     let r_2: usize = LittleEndian::read_u32(&read_four_bytes()) as usize;
+    let patch_vector_size: usize = LittleEndian::read_u32(&read_four_bytes()) as usize;
 
     assert!(q_angle == Q_ANGLE);
     assert!(q_strength == Q_STRENGTH);
     assert!(q_coherence == Q_COHERENCE);
     assert!(r_2 == R_2);
+    assert!(patch_vector_size == PATCH_VECTOR_SIZE);
 
     for (angle, strength, coherence, pixel_type) in
         iproduct!((0..q_angle), (0..q_strength), (0..q_coherence), (0..r_2))
@@ -39,12 +41,8 @@ pub fn read_filter(filename: &str) -> FilterBank {
         for i in 0..PATCH_VECTOR_SIZE {
             filter[[angle, strength, coherence, pixel_type, i]] =
                 LittleEndian::read_f32(&read_four_bytes()) as f_t;
-            println!("{}", filter[[angle, strength, coherence, pixel_type, i]]);
+            //println!("{}", filter[[angle, strength, coherence, pixel_type, i]]);
         }
-    }
-
-    for i in 0..PATCH_VECTOR_SIZE {
-        println!("{}", filter[[3, 1, 1, 0, i]]);
     }
 
     filter
@@ -58,6 +56,10 @@ mod tests {
 
     #[test]
     fn test_filter_load() {
-        read_filter("filters/filterbank");
+        let filter = read_filter("filters/filterbank");
+
+        for i in 0..PATCH_VECTOR_SIZE {
+            println!("{}", filter[[3, 2, 1, 2, i]]);
+        }
     }
 }
