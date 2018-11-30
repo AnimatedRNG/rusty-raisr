@@ -50,7 +50,7 @@ fn blerp(
     )
 }
 
-fn bilinear_filter(img: &DMatrix<FloatType>, ideal_size: (usize, usize)) -> DMatrix<FloatType> {
+pub fn bilinear_filter(img: &DMatrix<FloatType>, ideal_size: (usize, usize)) -> DMatrix<FloatType> {
     let dx = img.shape().0 as FloatType / ideal_size.0 as FloatType;
     let dy = img.shape().1 as FloatType / ideal_size.1 as FloatType;
 
@@ -82,7 +82,7 @@ fn bilinear_filter(img: &DMatrix<FloatType>, ideal_size: (usize, usize)) -> DMat
     output_image
 }
 
-fn create_filter_image(hr_y: &DMatrix<FloatType>) -> FilterImage {
+pub fn create_filter_image(hr_y: &DMatrix<FloatType>) -> FilterImage {
     let dims = hr_y.shape();
 
     let ideal_size = (dims.0, dims.1);
@@ -115,7 +115,7 @@ fn create_filter_image(hr_y: &DMatrix<FloatType>) -> FilterImage {
     (final_angle, final_strength, final_coherence)
 }
 
-fn inference(
+pub fn inference(
     hr_y: &DMatrix<FloatType>,
     filter_image: &FilterImage,
     filter_bank: &FilterBank,
@@ -158,6 +158,26 @@ fn inference(
     upscaled
 }
 
+fn to_float(m: &DMatrix<u8>, normalize: bool) -> DMatrix<FloatType> {
+    m.map(|a| a as FloatType / (if normalize { 255.0 } else { 1.0 }))
+}
+
+fn to_byte(m: &DMatrix<FloatType>) -> DMatrix<u8> {
+    m.map(|a| (a * 255.0) as u8)
+}
+
+pub fn debug_filter_image(
+    angle: &DMatrix<u8>,
+    strength: &DMatrix<u8>,
+    coherence: &DMatrix<u8>,
+) -> (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>) {
+    (
+        to_byte(&(to_float(angle, false) / Q_ANGLE as FloatType)),
+        to_byte(&(to_float(strength, false) / Q_STRENGTH as FloatType)),
+        to_byte(&(to_float(coherence, false) / Q_COHERENCE as FloatType)),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use color::{from_ycbcr, to_ycbcr};
@@ -165,26 +185,6 @@ mod tests {
     use filters::*;
     use image_io::{read_image, write_image, write_image_u8};
     use raisr::*;
-
-    fn to_float(m: &DMatrix<u8>, normalize: bool) -> DMatrix<FloatType> {
-        m.map(|a| a as FloatType / (if normalize { 255.0 } else { 1.0 }))
-    }
-
-    fn to_byte(m: &DMatrix<FloatType>) -> DMatrix<u8> {
-        m.map(|a| (a * 255.0) as u8)
-    }
-
-    fn debug_filter_image(
-        angle: &DMatrix<u8>,
-        strength: &DMatrix<u8>,
-        coherence: &DMatrix<u8>,
-    ) -> (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>) {
-        (
-            to_byte(&(to_float(angle, false) / Q_ANGLE as FloatType)),
-            to_byte(&(to_float(strength, false) / Q_STRENGTH as FloatType)),
-            to_byte(&(to_float(coherence, false) / Q_COHERENCE as FloatType)),
-        )
-    }
 
     #[test]
     fn test_raisr() {

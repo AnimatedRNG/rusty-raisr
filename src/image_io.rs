@@ -5,7 +5,7 @@ use nalgebra::DMatrix;
 use std::fs;
 
 pub fn read_image(filename: &str) -> (DMatrix<FloatType>, DMatrix<FloatType>, DMatrix<FloatType>) {
-    let img = image::open(filename).unwrap();
+    let img = image::open(filename).expect(&format!("Unable to read image {}", filename));
     let dims = img.dimensions();
     let (mut red, mut green, mut blue) = (
         DMatrix::zeros(dims.0 as usize, dims.1 as usize),

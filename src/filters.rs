@@ -7,7 +7,8 @@ use std::io::Read;
 pub type FilterBank = ArrayD<FloatType>;
 
 pub fn read_filter(filename: &str) -> FilterBank {
-    let reference = fs::File::open(filename).unwrap();
+    let reference =
+        fs::File::open(filename).expect(&format!("Unable to read filterbank {}", filename));
     let mut file_bytes = reference.bytes();
 
     let mut filter = FilterBank::zeros(IxDyn(&[
