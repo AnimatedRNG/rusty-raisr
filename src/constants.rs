@@ -22,6 +22,7 @@ pub const TILE_SIZE: usize = 64;
 pub type PatchSizeType = nalgebra::U11;
 pub type GradientSizeType = nalgebra::U9;
 pub type GradientVectorSizeType = nalgebra::U81;
+pub type PatchVectorSizeType = nalgebra::U121;
 
 pub type ImagePatch = nalgebra::Matrix<
     FloatType,
@@ -39,6 +40,11 @@ pub type GradientVector = nalgebra::Vector<
     FloatType,
     GradientVectorSizeType,
     nalgebra::MatrixArray<FloatType, GradientVectorSizeType, nalgebra::U1>,
+>;
+pub type PatchVector = nalgebra::Vector<
+    FloatType,
+    PatchVectorSizeType,
+    nalgebra::MatrixArray<FloatType, PatchVectorSizeType, nalgebra::U1>,
 >;
 
 pub const WEIGHTS: [FloatType; GRADIENT_SIZE * GRADIENT_SIZE] = [

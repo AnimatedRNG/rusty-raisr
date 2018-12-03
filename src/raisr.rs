@@ -134,15 +134,16 @@ pub fn inference(
                     let strength = filter_image.1[(x, y)] as usize;
                     let coherence = filter_image.2[(x, y)] as usize;
                     let pixel_type = ((x - margin) % R) * R + (y - margin) % R;
-                    let filter: ArrayView1<FloatType> =
-                        filter_bank.slice(s![angle, strength, coherence, pixel_type, ..]);
-                    let patch = grab_patch(&hr_y, (x, y)).transpose();
-                    let patch_slice: &[FloatType] = patch.as_slice();
-                    let patch_nd = ArrayView::from_shape((121,), patch_slice).unwrap();
+                    let filter = filter_bank.slice(s![angle, strength, coherence, pixel_type, ..]);
+                    let filter: &[FloatType] = filter.as_slice().unwrap();
+                    let filter: PatchVector = PatchVector::from_column_slice(filter);
+                    let patch: PatchVector = PatchVector::from_row_slice(
+                        grab_patch(&hr_y, (x, y)).transpose().as_slice(),
+                    );
 
                     (
                         (x, y),
-                        FloatType::min(FloatType::max(patch_nd.dot(&filter), 1e-6), 1.0 - 1e-6),
+                        FloatType::min(FloatType::max(patch.dot(&filter), 1e-6), 1.0 - 1e-6),
                     )
                 })
                 .collect()
