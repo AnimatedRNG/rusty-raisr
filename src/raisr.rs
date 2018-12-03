@@ -1,6 +1,12 @@
+use std::collections::BTreeMap;
+use std::fs::read_dir;
+use std::path::Path;
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+
 use constants::*;
 use filters::FilterBank;
 use hashkey::hashkey;
+use image_io::read_image;
 use itertools::Itertools;
 use nalgebra;
 use nalgebra::DMatrix;
@@ -82,6 +88,7 @@ pub fn bilinear_filter(img: &DMatrix<FloatType>, ideal_size: (usize, usize)) -> 
     output_image
 }
 
+// TODO: Refactor using parallel_image_op
 pub fn create_filter_image(hr_y: &DMatrix<FloatType>) -> FilterImage {
     let dims = hr_y.shape();
 
@@ -128,6 +135,90 @@ pub fn parallel_image_op<T: Send + Sync>(
         })
         .collect()
 }
+
+pub struct TrainImage {
+    hr_y: DMatrix<FloatType>,
+    hash_img: FilterImage,
+    y: DMatrix<FloatType>,
+}
+
+pub type TrainingSender = SyncSender<TrainImage>;
+pub type TrainingReceiver = Receiver<TrainImage>;
+
+pub fn training_session() -> (TrainingSender, TrainingReceiver) {
+    return sync_channel(0);
+}
+
+pub fn training_generator(hr_folder: &str, lr_folder: &str, sender: TrainingSender) {
+    let hr_names: BTreeMap<String, String> = read_dir(hr_folder)
+        .unwrap()
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            (
+                Path::new(path.file_name().unwrap())
+                    .file_stem()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
+                path.to_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    let lr_names: BTreeMap<String, String> = read_dir(lr_folder)
+        .unwrap()
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            (
+                Path::new(path.file_name().unwrap())
+                    .file_stem()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
+                path.to_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+
+    // Parallel image load, hash, and send for training
+    hr_names
+        .par_iter()
+        .map(move |hr_entry| {
+            if lr_names.contains_key(hr_entry.0) {
+                println!(
+                    "Found training pair: {} {}",
+                    hr_entry.1, lr_names[hr_entry.0]
+                );
+                let hr_img = read_image(&hr_entry.1);
+                let lr_img = read_image(&lr_names[hr_entry.0]);
+                println!("Finished reading {}", hr_entry.0);
+
+                let (label_hr_y, _, _) = hr_img;
+                let (lr_y, _, _) = lr_img;
+                let hr_dims = (label_hr_y.shape().0, label_hr_y.shape().1);
+                assert!(hr_dims == (lr_y.shape().0 * R, lr_y.shape().1 * R));
+
+                let cheap_hr_y =
+                    bilinear_filter(&lr_y, (label_hr_y.shape().0, label_hr_y.shape().1));
+                println!("Bilinear filtered {}", hr_entry.0);
+
+                let hash_img = create_filter_image(&cheap_hr_y);
+                println!("Hashed {}", hr_entry.0);
+
+                sender
+                    .send(TrainImage {
+                        hr_y: cheap_hr_y,
+                        hash_img: hash_img,
+                        y: label_hr_y,
+                    })
+                    .unwrap();
+            }
+        })
+        .count();
+}
+
+pub fn training(receiver: TrainingReceiver) {}
 
 pub fn inference(
     hr_y: &DMatrix<FloatType>,
@@ -192,12 +283,13 @@ mod tests {
 
     #[test]
     fn test_raisr() {
-        test_create_filter_image();
-        test_bilinear_filter_image();
-        test_patch();
-        test_hash_image();
-        test_apply_filter();
-        test_inference();
+        //test_create_filter_image();
+        //test_bilinear_filter_image();
+        //test_patch();
+        //test_hash_image();
+        //test_apply_filter();
+        //test_inference();
+        test_training();
     }
 
     fn test_create_filter_image() {
@@ -298,5 +390,15 @@ mod tests {
         let new_rgb = from_ycbcr(&inferred_y, &hr_cb, &hr_cr);
         write_image("output/Fallout_inferred.png", &new_rgb);
         write_image_u8("output/Fallout_hashimg.png", &debug);
+    }
+
+    fn test_training() {
+        test_training_generator();
+    }
+
+    fn test_training_generator() {
+        let (sender, receiver) = training_session();
+
+        training_generator("train/hr", "train/lr", sender);
     }
 }
