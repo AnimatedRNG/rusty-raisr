@@ -115,6 +115,20 @@ pub fn create_filter_image(hr_y: &DMatrix<FloatType>) -> FilterImage {
     (final_angle, final_strength, final_coherence)
 }
 
+pub fn parallel_image_op<T: Send + Sync>(
+    dims: (usize, usize),
+    op: &(Fn(usize, usize) -> T + Send + Sync),
+) -> Vec<Vec<((usize, usize), T)>> {
+    (0..dims.0)
+        .into_par_iter()
+        .map(|x: usize| {
+            (0..dims.1)
+                .map(|y: usize| ((x, y), op(x, y)))
+                .collect::<Vec<((usize, usize), T)>>()
+        })
+        .collect()
+}
+
 pub fn inference(
     hr_y: &DMatrix<FloatType>,
     filter_image: &FilterImage,
@@ -125,30 +139,19 @@ pub fn inference(
 
     let mut upscaled: DMatrix<FloatType> = DMatrix::zeros(ideal_size.0, ideal_size.1);
 
-    let results: Vec<Vec<((usize, usize), FloatType)>> = (0..ideal_size.0)
-        .into_par_iter()
-        .map(|x: usize| {
-            (0..ideal_size.1)
-                .map(|y: usize| {
-                    let angle = filter_image.0[(x, y)] as usize;
-                    let strength = filter_image.1[(x, y)] as usize;
-                    let coherence = filter_image.2[(x, y)] as usize;
-                    let pixel_type = ((x - margin) % R) * R + (y - margin) % R;
-                    let filter = filter_bank.slice(s![angle, strength, coherence, pixel_type, ..]);
-                    let filter: &[FloatType] = filter.as_slice().unwrap();
-                    let filter: PatchVector = PatchVector::from_column_slice(filter);
-                    let patch: PatchVector = PatchVector::from_row_slice(
-                        grab_patch(&hr_y, (x, y)).transpose().as_slice(),
-                    );
+    let results = parallel_image_op(ideal_size, &|x, y| {
+        let angle = filter_image.0[(x, y)] as usize;
+        let strength = filter_image.1[(x, y)] as usize;
+        let coherence = filter_image.2[(x, y)] as usize;
+        let pixel_type = ((x - margin) % R) * R + (y - margin) % R;
+        let filter = filter_bank.slice(s![angle, strength, coherence, pixel_type, ..]);
+        let filter: &[FloatType] = filter.as_slice().unwrap();
+        let filter: PatchVector = PatchVector::from_column_slice(filter);
+        let patch: PatchVector =
+            PatchVector::from_row_slice(grab_patch(&hr_y, (x, y)).transpose().as_slice());
 
-                    (
-                        (x, y),
-                        FloatType::min(FloatType::max(patch.dot(&filter), 1e-6), 1.0 - 1e-6),
-                    )
-                })
-                .collect()
-        })
-        .collect();
+        FloatType::min(FloatType::max(patch.dot(&filter), 1e-6), 1.0 - 1e-6)
+    });
 
     results.iter().foreach(|row| {
         row.iter().foreach(|((x, y), value)| {
