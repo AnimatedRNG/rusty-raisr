@@ -8,10 +8,14 @@ extern crate ndarray;
 extern crate byteorder;
 extern crate flate2;
 extern crate num;
+#[macro_use]
+extern crate glium;
+//extern crate palette;
 
 pub mod color;
 pub mod constants;
 pub mod filters;
+pub mod gpu;
 pub mod hashkey;
 pub mod image_io;
 pub mod raisr;
