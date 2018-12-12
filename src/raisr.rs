@@ -1,12 +1,15 @@
+use crossbeam_channel::{bounded, Receiver, Sender};
 use std::collections::BTreeMap;
-use std::fs::read_dir;
+use std::collections::VecDeque;
+use std::fs::{create_dir, read_dir};
 use std::path::Path;
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::thread;
 
+use cgls::cgls;
 use constants::*;
-use filters::{apply_filter, FilterBank};
+use filters::{apply_filter, write_filter, FilterBank};
 use hashkey::hashkey;
-use image_io::read_image;
+use image_io::{read_image, write_image_u8};
 use itertools::Itertools;
 use nalgebra;
 use nalgebra::DMatrix;
@@ -95,8 +98,12 @@ pub fn create_filter_image(hr_y: &DMatrix<FloatType>) -> FilterImage {
     let ideal_size = (dims.0, dims.1);
 
     let results: Vec<Vec<((usize, usize), (u8, u8, u8))>> = (0..ideal_size.0)
-        .into_par_iter()
+        .into_iter()
         .map(|x: usize| {
+            /*println!(
+                "{}% complete",
+                x as f32 / ideal_size.0 as f32 * 100.0 as f32
+            );*/
             (0..ideal_size.1)
                 .map(|y: usize| {
                     let patch = grab_patch(&hr_y, (x, y));
@@ -122,6 +129,21 @@ pub fn create_filter_image(hr_y: &DMatrix<FloatType>) -> FilterImage {
     (final_angle, final_strength, final_coherence)
 }
 
+// TODO: DRY
+pub fn image_op<T: Send + Sync>(
+    dims: (usize, usize),
+    op: &(Fn(usize, usize) -> T + Send + Sync),
+) -> Vec<Vec<((usize, usize), T)>> {
+    (0..dims.0)
+        .into_iter()
+        .map(|x: usize| {
+            (0..dims.1)
+                .map(|y: usize| ((x, y), op(x, y)))
+                .collect::<Vec<((usize, usize), T)>>()
+        })
+        .collect()
+}
+
 pub fn parallel_image_op<T: Send + Sync>(
     dims: (usize, usize),
     op: &(Fn(usize, usize) -> T + Send + Sync),
@@ -142,11 +164,45 @@ pub struct TrainImage {
     y: DMatrix<FloatType>,
 }
 
-pub type TrainingSender = SyncSender<TrainImage>;
+pub type TrainingSender = Sender<TrainImage>;
 pub type TrainingReceiver = Receiver<TrainImage>;
 
 pub fn training_session() -> (TrainingSender, TrainingReceiver) {
-    return sync_channel(0);
+    return bounded(1);
+}
+
+fn check_cache(name: &str) -> Option<FilterImage> {
+    if Path::new("cache").exists() {
+        let hashimg_filename = Path::new("cache").join(name);
+        if hashimg_filename.exists() {
+            let filter_img_raw = read_image(hashimg_filename.to_str().unwrap());
+
+            Some((
+                (filter_img_raw.0 * Q_ANGLE as f32).map(|f| f as u8),
+                (filter_img_raw.1 * Q_STRENGTH as f32).map(|f| f as u8),
+                (filter_img_raw.2 * Q_COHERENCE as f32).map(|f| f as u8),
+            ))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+fn cache_img(name: &str, image_contents: &FilterImage) {
+    let path = Path::new("cache");
+    if !path.exists() {
+        create_dir("cache").expect("Unable to create cache directory!");
+    }
+    let path = Path::new("cache").join(name);
+    let path = path.to_str().unwrap();
+    println!("Writing to {}", path);
+
+    write_image_u8(
+        path,
+        &debug_filter_image(&image_contents.0, &image_contents.1, &image_contents.2),
+    );
 }
 
 pub fn training_generator(hr_folder: &str, lr_folder: &str, sender: TrainingSender) {
@@ -203,7 +259,16 @@ pub fn training_generator(hr_folder: &str, lr_folder: &str, sender: TrainingSend
                     bilinear_filter(&lr_y, (label_hr_y.shape().0, label_hr_y.shape().1));
                 println!("Bilinear filtered {}", hr_entry.0);
 
-                let hash_img = create_filter_image(&cheap_hr_y);
+                let hash_img_name = format!("{}_hashimg.png", hr_entry.0);
+                let hash_img = match check_cache(&hash_img_name) {
+                    None => {
+                        println!("{} is not in cache; computing...", hash_img_name);
+                        let hash_img = create_filter_image(&cheap_hr_y);
+                        cache_img(&hash_img_name, &hash_img);
+                        hash_img
+                    }
+                    Some(hash_img) => hash_img,
+                };
                 println!("Hashed {}", hr_entry.0);
 
                 sender
@@ -218,7 +283,125 @@ pub fn training_generator(hr_folder: &str, lr_folder: &str, sender: TrainingSend
         .count();
 }
 
-pub fn training(receiver: TrainingReceiver) {}
+pub fn training(receiver: TrainingReceiver, output_file: &str) {
+    let Q: ArrayD<FloatType> = ArrayD::zeros(IxDyn(&[
+        Q_ANGLE,
+        Q_STRENGTH,
+        Q_COHERENCE,
+        R_2,
+        PATCH_VECTOR_SIZE,
+        PATCH_VECTOR_SIZE,
+    ]));
+
+    let V: ArrayD<FloatType> = ArrayD::zeros(IxDyn(&[
+        Q_ANGLE,
+        Q_STRENGTH,
+        Q_COHERENCE,
+        R_2,
+        PATCH_VECTOR_SIZE,
+    ]));
+
+    let tmp: Vec<(ArrayD<FloatType>, ArrayD<FloatType>)> = receiver
+        .iter()
+        .par_bridge()
+        .map(|received| {
+            let mut Q: ArrayD<FloatType> = ArrayD::zeros(IxDyn(&[
+                Q_ANGLE,
+                Q_STRENGTH,
+                Q_COHERENCE,
+                R_2,
+                PATCH_VECTOR_SIZE,
+                PATCH_VECTOR_SIZE,
+            ]));
+
+            let mut V: ArrayD<FloatType> = ArrayD::zeros(IxDyn(&[
+                Q_ANGLE,
+                Q_STRENGTH,
+                Q_COHERENCE,
+                R_2,
+                PATCH_VECTOR_SIZE,
+            ]));
+
+            let (hr_y, hash_img, y_img) = (received.hr_y, received.hash_img, received.y);
+
+            let ideal_size = (hr_y.shape().0, hr_y.shape().1);
+            let margin = PATCH_MARGIN;
+
+            for x in 0..ideal_size.0 {
+                for y in 0..ideal_size.1 {
+                    let angle = hash_img.0[(x, y)] as usize;
+                    let strength = hash_img.1[(x, y)] as usize;
+                    let coherence = hash_img.2[(x, y)] as usize;
+                    let pixel_type: usize = ((x - margin) % R) * R + (y - margin) % R;
+
+                    let patch: PatchVector = PatchVector::from_row_slice(
+                        grab_patch(&hr_y, (x, y)).transpose().as_slice(),
+                    );
+
+                    let pixel_hr = y_img[(x, y)];
+
+                    let mut a_t_a = patch * patch.transpose();
+
+                    //let a_t_b = patch.transpose() * pixel_hr;
+                    //let a_t_b: PatchVector = a_t_b.transpose();
+                    let mut a_t_b = patch * pixel_hr;
+
+                    let mut q_slice =
+                        Q.slice_mut(s![angle, strength, coherence, pixel_type, .., ..]);
+                    let mut v_slice = V.slice_mut(s![angle, strength, coherence, pixel_type, ..]);
+
+                    let a_t_a = ArrayViewMut::from_shape(
+                        (PATCH_VECTOR_SIZE, PATCH_VECTOR_SIZE),
+                        a_t_a.as_mut_slice(),
+                    )
+                    .unwrap();
+                    let a_b_a =
+                        ArrayViewMut::from_shape(PATCH_VECTOR_SIZE, a_t_b.as_mut_slice()).unwrap();
+
+                    q_slice += &a_t_a;
+                    v_slice += &a_b_a;
+                }
+                println!(
+                    "{}% done with image",
+                    (x as f32 / ideal_size.0 as f32) * 100.0
+                );
+            }
+            println!("Trained on image");
+
+            (Q, V)
+        })
+        .collect();
+    let (Q, V) = tmp.iter().fold((Q, V), |old, new| {
+        let new = new.clone();
+        (old.0 + new.0, old.1 + new.1)
+    });
+
+    let mut filter = ArrayD::zeros(IxDyn(&[
+        Q_ANGLE,
+        Q_STRENGTH,
+        Q_COHERENCE,
+        R_2,
+        PATCH_VECTOR_SIZE,
+    ]));
+
+    for (angle, strength, coherence, pixel_type) in
+        iproduct!((0..Q_ANGLE), (0..Q_STRENGTH), (0..Q_COHERENCE), (0..R_2))
+    {
+        let q = Q.slice(s![angle, strength, coherence, pixel_type, .., ..]);
+        let v = Q.slice(s![angle, strength, coherence, pixel_type, ..]);
+
+        let q = PatchSqMatrix::from_row_slice(q.as_slice().unwrap());
+        let v = PatchVector::from_column_slice(v.as_slice().unwrap());
+
+        let h = cgls(&q, &v);
+
+        for i in 0..PATCH_VECTOR_SIZE {
+            filter[[angle, strength, coherence, pixel_type, i]] = h[i];
+        }
+    }
+
+    write_filter(output_file, &filter);
+}
 
 pub fn inference(
     hr_y: &DMatrix<FloatType>,
@@ -287,6 +470,7 @@ mod tests {
     use filters::*;
     use image_io::{read_image, write_image, write_image_u8};
     use raisr::*;
+    use std::thread;
 
     #[test]
     fn test_raisr() {
@@ -295,8 +479,8 @@ mod tests {
         //test_patch();
         //test_hash_image();
         //test_apply_filter();
-        test_inference();
-        //test_training();
+        //test_inference();
+        test_training();
     }
 
     fn test_create_filter_image() {
@@ -406,6 +590,7 @@ mod tests {
     fn test_training_generator() {
         let (sender, receiver) = training_session();
 
-        training_generator("train/hr", "train/lr", sender);
+        thread::spawn(move || training_generator("train/hr", "train/lr", sender));
+        training(receiver, "filters/new_filterbank");
     }
 }

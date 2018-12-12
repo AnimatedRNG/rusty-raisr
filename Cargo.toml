@@ -17,3 +17,4 @@ openblas-src = { version = "0.6.0", default-features = false, features = ["cblas
 byteorder = "1.2.4"
 glium = { git="https://github.com/bobtwinkles/glium.git", branch="image_unit_support" }
 #palette = "*"
+crossbeam-channel = "0.3"
