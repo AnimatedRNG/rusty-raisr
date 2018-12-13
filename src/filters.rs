@@ -2,9 +2,52 @@ use byteorder::{ByteOrder, LittleEndian};
 use constants::*;
 use ndarray::prelude::*;
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Write};
 
 pub type FilterBank = (ArrayD<u8>, ArrayD<f32>);
+
+fn transform_u32_to_array_of_u8(x: u32) -> [u8; 4] {
+    let b1: u8 = ((x >> 24) & 0xff) as u8;
+    let b2: u8 = ((x >> 16) & 0xff) as u8;
+    let b3: u8 = ((x >> 8) & 0xff) as u8;
+    let b4: u8 = (x & 0xff) as u8;
+    return [b1, b2, b3, b4];
+}
+
+pub fn write_filter(filename: &str, filterbank: &ArrayD<f32>) {
+    let mut filter_file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(filename)
+        .expect(&format!("Unable to create {}", filename));
+
+    {
+        let mut write_u32 = |data: usize| {
+            let mut buf = [0; 4];
+            LittleEndian::write_u32(&mut buf, data as u32);
+            filter_file.write(&buf).unwrap();
+        };
+
+        write_u32(Q_ANGLE);
+        write_u32(Q_STRENGTH);
+        write_u32(Q_COHERENCE);
+        write_u32(R_2);
+        write_u32(PATCH_VECTOR_SIZE);
+    }
+
+    for (angle, strength, coherence, pixel_type) in
+        iproduct!((0..Q_ANGLE), (0..Q_STRENGTH), (0..Q_COHERENCE), (0..R_2))
+    {
+        for i in 0..PATCH_VECTOR_SIZE {
+            let mut buf = [0; 4];
+            LittleEndian::write_f32(
+                &mut buf,
+                filterbank[[angle, strength, coherence, pixel_type, i]],
+            );
+            filter_file.write(&buf).unwrap();
+        }
+    }
+}
 
 pub fn read_filter(filename: &str) -> FilterBank {
     let reference =

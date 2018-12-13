@@ -10,8 +10,6 @@ extern crate flate2;
 extern crate num;
 #[macro_use]
 extern crate glium;
-#[macro_use]
-extern crate crossbeam_channel;
 //extern crate palette;
 
 pub mod cgls;

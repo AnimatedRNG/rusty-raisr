@@ -24,15 +24,13 @@ pub type GradientSizeType = nalgebra::U9;
 pub type GradientVectorSizeType = nalgebra::U81;
 pub type PatchVectorSizeType = nalgebra::U121;
 
-pub type ImagePatch = nalgebra::Matrix<
+pub type ImagePatch = nalgebra::SquareMatrix<
     FloatType,
-    PatchSizeType,
     PatchSizeType,
     nalgebra::MatrixArray<FloatType, PatchSizeType, PatchSizeType>,
 >;
-pub type GradientBlock = nalgebra::Matrix<
+pub type GradientBlock = nalgebra::SquareMatrix<
     FloatType,
-    GradientSizeType,
     GradientSizeType,
     nalgebra::MatrixArray<FloatType, GradientSizeType, GradientSizeType>,
 >;
@@ -45,6 +43,12 @@ pub type PatchVector = nalgebra::Vector<
     FloatType,
     PatchVectorSizeType,
     nalgebra::MatrixArray<FloatType, PatchVectorSizeType, nalgebra::U1>,
+>;
+
+pub type PatchSqMatrix = nalgebra::SquareMatrix<
+    FloatType,
+    PatchVectorSizeType,
+    nalgebra::MatrixArray<FloatType, PatchVectorSizeType, PatchVectorSizeType>,
 >;
 
 pub const WEIGHTS: [FloatType; GRADIENT_SIZE * GRADIENT_SIZE] = [
