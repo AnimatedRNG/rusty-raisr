@@ -143,12 +143,12 @@ fn inference_gpu(filename: &str, filterbank: &str, output: &str) {
                 bounds: bounds_texture.sampled().magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest).minify_filter(glium::uniforms::MinifySamplerFilter::Nearest).wrap_function(glium::uniforms::SamplerWrapFunction::Clamp),
                 hr_image: output_texture.image_unit().set_format(glium::uniforms::ImageUnitFormat::RGBA8).set_access(glium::uniforms::ImageUnitAccess::ReadWrite).set_level(0),
                 R: R as u32,
-        },
-        (image_dimensions.0 * R as u32) / BLOCK_DIM,
-        (image_dimensions.1 * R as u32) / BLOCK_DIM,
-        1,
-    );
-
+            },
+            (image_dimensions.0 * R as u32) / BLOCK_DIM,
+            (image_dimensions.1 * R as u32) / BLOCK_DIM,
+            1,
+        );
+        
         display.memory_barrier(
             glium::backend::MemoryBarrier::SHADER_IMAGE_ACCESS_BARRIER
                 | glium::backend::MemoryBarrier::TEXTURE_UPDATE_BARRIER,
@@ -183,15 +183,15 @@ mod tests {
             "filters/filterbank",
             "output/Fallout_gpu_inferred.png",
         );*/
-        inference_gpu(
+        /*inference_gpu(
             "test/veronica.png",
             "filters/filterbank",
             "output/veronica_gpu_inferred.png",
-        );
-        /*inference_gpu(
-            "test/MirrorsEdge_1.jpg",
-            "filters/filterbank",
-            "output/MirrorsEdge_1_inferred.png",
         );*/
+        inference_gpu(
+            "test/full_hd.jpg",
+            "filters/filterbank",
+            "output/full_hd_inferred.png",
+        );
     }
 }
