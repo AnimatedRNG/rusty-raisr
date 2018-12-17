@@ -10,6 +10,12 @@ undecomposed.x += gradient_xx[upper_left.x + {i}][upper_left.y + {j}] * {gaussia
 undecomposed.y += gradient_xy[upper_left.x + {i}][upper_left.y + {j}] * {gaussians}f; \\
 undecomposed.w += gradient_yy[upper_left.x + {i}][upper_left.y + {j}] * {gaussians}f; \\'''
 
+iteration_improved = '''
+undecomposed.xyw += vec3(                                                  \\
+    gradient_xx[upper_left.x + {i}][upper_left.y + {j}],                   \\
+    gradient_xy[upper_left.x + {i}][upper_left.y + {j}],                   \\
+    gradient_yy[upper_left.x + {i}][upper_left.y + {j}]) * {gaussians}f;   \\'''
+
 
 def gaussian2d(shape=(3, 3), sigma=0.5):
     """
@@ -32,11 +38,12 @@ def unroll_loops():
     dim = half_gradient * 2 + 1
     weighting = gaussian2d([dim, dim], 2)
 
-    source = '''#define GRADIENT_GATHER() \\'''
+    source = '''#define GRADIENT_GATHER() \\\nvec3 gaussians; \\'''
 
     for i in range(dim):
         for j in range(dim):
-            source += iteration.format(i=i, j=j, gaussians=weighting[i][j])
+            source += iteration_improved.format(i=i,
+                                                j=j, gaussians=weighting[i][j])
 
     source = source[: -2] + '\n'
 
