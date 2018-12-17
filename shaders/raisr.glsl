@@ -1,5 +1,7 @@
 #version 430
 
+//#pragma optionNV(unroll all)
+
 #define BLOCK_DIM
 #define IMAGE_KERNEL_HALF_SIZE 5
 #define GRADIENT_KERNEL_HALF_SIZE 4
@@ -79,9 +81,7 @@ void load_bilinear_into_shared_tiled() {
     uint overall_dim_bilinear = BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE;
     uint overall_dim = BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE;
 
-#pragma optionNV(unroll all)
     for (uint a_i = 0; a_i <= overall_dim_bilinear / BLOCK_DIM; a_i++) {
-#pragma optionNV(unroll all)
         for (uint a_j = 0; a_j <= overall_dim_bilinear / BLOCK_DIM; a_j++) {
             uvec2 mem_offset = uvec2(a_i, a_j) * BLOCK_DIM + thread_idx;
             ivec2 coords = ivec2(upper_left + mem_offset);
@@ -98,9 +98,7 @@ void load_bilinear_into_shared_tiled() {
 
     lower_right = lower_right - 1;
 
-#pragma optionNV(unroll all)
     for (uint a_i = 0; a_i <= overall_dim / BLOCK_DIM; a_i++) {
-#pragma optionNV(unroll all)
         for (uint a_j = 0; a_j <= overall_dim / BLOCK_DIM; a_j++) {
             uvec2 mem_offset = uvec2(a_i, a_j) * BLOCK_DIM + thread_idx;
             uvec2 bmo = mem_offset + 1;
@@ -256,9 +254,7 @@ float apply_filter(uvec4 key, uvec2 upper_left) {
     float accum = 0.0;
 
     // TODO: Replace with more vectorized accumulate
-#pragma optionNV(unroll all)
     for (uint i = upper_left.x; i < lower_right.x; i++) {
-#pragma optionNV(unroll all)
         for (uint j = upper_left.x; j < lower_right.y; j += 4) {
             vec4 filters = ((vec4(texelFetch(filterbank, int(fb_ptr)))
                              + 0.5) / 255.0) * span + min_val;
