@@ -5,9 +5,14 @@ use nalgebra::DMatrix;
 use std::fs;
 
 pub type RGBFloatImage = (DMatrix<FloatType>, DMatrix<FloatType>, DMatrix<FloatType>);
+pub type RGBUnsignedImage = (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>);
 
 pub trait ReadableImage<T> {
     fn read_image(filename: &str) -> T;
+}
+
+pub trait WriteableImage<T> {
+    fn write_image(filename: &str, img: &T);
 }
 
 impl ReadableImage<RGBFloatImage> for RGBFloatImage {
@@ -31,41 +36,42 @@ impl ReadableImage<RGBFloatImage> for RGBFloatImage {
     }
 }
 
-pub fn write_image(
-    filename: &str,
-    img: &(DMatrix<FloatType>, DMatrix<FloatType>, DMatrix<FloatType>),
-) {
-    if fs::metadata(filename).is_ok() {
-        fs::remove_file(filename).unwrap();
+impl WriteableImage<RGBFloatImage> for RGBFloatImage {
+    fn write_image(filename: &str, img: &RGBFloatImage) {
+        if fs::metadata(filename).is_ok() {
+            fs::remove_file(filename).unwrap();
+        }
+
+        let to_u8 = |f| (FloatType::min(FloatType::max(f, 0.0), 1.0) * 255.0) as u8;
+
+        let ref mut buffer =
+            image::ImageBuffer::from_fn(img.0.shape().1 as u32, img.0.shape().0 as u32, |x, y| {
+                let (x, y) = (x as usize, y as usize);
+                let pixel = [
+                    to_u8(img.0[(y, x)]),
+                    to_u8(img.1[(y, x)]),
+                    to_u8(img.2[(y, x)]),
+                ];
+                image::Rgb(pixel)
+            });
+
+        buffer.save(filename).unwrap();
     }
-
-    let to_u8 = |f| (FloatType::min(FloatType::max(f, 0.0), 1.0) * 255.0) as u8;
-
-    let ref mut buffer =
-        image::ImageBuffer::from_fn(img.0.shape().1 as u32, img.0.shape().0 as u32, |x, y| {
-            let (x, y) = (x as usize, y as usize);
-            let pixel = [
-                to_u8(img.0[(y, x)]),
-                to_u8(img.1[(y, x)]),
-                to_u8(img.2[(y, x)]),
-            ];
-            image::Rgb(pixel)
-        });
-
-    buffer.save(filename).unwrap();
 }
 
-pub fn write_image_u8(filename: &str, img: &(DMatrix<u8>, DMatrix<u8>, DMatrix<u8>)) {
-    if fs::metadata(filename).is_ok() {
-        fs::remove_file(filename).unwrap();
+impl WriteableImage<RGBUnsignedImage> for RGBUnsignedImage {
+    fn write_image(filename: &str, img: &RGBUnsignedImage) {
+        if fs::metadata(filename).is_ok() {
+            fs::remove_file(filename).unwrap();
+        }
+
+        let ref mut buffer =
+            image::ImageBuffer::from_fn(img.0.shape().1 as u32, img.0.shape().0 as u32, |x, y| {
+                let (x, y) = (x as usize, y as usize);
+                let pixel = [img.0[(y, x)], img.1[(y, x)], img.2[(y, x)]];
+                image::Rgb(pixel)
+            });
+
+        buffer.save(filename).unwrap();
     }
-
-    let ref mut buffer =
-        image::ImageBuffer::from_fn(img.0.shape().1 as u32, img.0.shape().0 as u32, |x, y| {
-            let (x, y) = (x as usize, y as usize);
-            let pixel = [img.0[(y, x)], img.1[(y, x)], img.2[(y, x)]];
-            image::Rgb(pixel)
-        });
-
-    buffer.save(filename).unwrap();
 }

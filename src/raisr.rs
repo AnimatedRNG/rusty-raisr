@@ -6,7 +6,7 @@ use cgls::cgls;
 use constants::*;
 use filters::{apply_filter, write_filter, FilterBank};
 use hashkey::hashkey;
-use image_io::{write_image_u8, RGBFloatImage, ReadableImage};
+use image_io::{RGBFloatImage, RGBUnsignedImage, ReadableImage, WriteableImage};
 use itertools::Itertools;
 use nalgebra;
 use nalgebra::DMatrix;
@@ -189,7 +189,7 @@ fn cache_img(name: &str, image_contents: &FilterImage) {
     let path = path.to_str().unwrap();
     println!("Writing to {}", path);
 
-    write_image_u8(
+    RGBUnsignedImage::write_image(
         path,
         &debug_filter_image(&image_contents.0, &image_contents.1, &image_contents.2),
     );
@@ -452,7 +452,7 @@ mod tests {
     use color::{from_ycbcr, to_ycbcr};
     use constants::*;
     use filters::*;
-    use image_io::{write_image, write_image_u8, RGBFloatImage, ReadableImage};
+    use image_io::{RGBFloatImage, RGBUnsignedImage, ReadableImage, WriteableImage};
     use raisr::*;
     use std::thread;
 
@@ -471,7 +471,7 @@ mod tests {
         let (r, g, b) = RGBFloatImage::read_image("test/veronica.jpg");
         let (y, cb, cr) = to_ycbcr(&r, &g, &b);
         let (r, g, b) = from_ycbcr(&y, &cb, &cr);
-        write_image("output/veronica_result.png", &(r, g, b));
+        RGBFloatImage::write_image("output/veronica_result.png", &(r, g, b));
     }
 
     fn test_bilinear_filter_image() {
@@ -484,7 +484,7 @@ mod tests {
         let cb = bilinear_filter(&cb, (lr_dims.0, lr_dims.1));
         let cr = bilinear_filter(&cr, (lr_dims.0, lr_dims.1));
         let (r, g, b) = from_ycbcr(&y, &cb, &cr);
-        write_image("output/veronica_result.png", &(r, g, b));
+        RGBFloatImage::write_image("output/veronica_result.png", &(r, g, b));
     }
 
     fn test_patch() {
@@ -514,7 +514,7 @@ mod tests {
         let filter_image = create_filter_image(&hr_y);
         let debug = debug_filter_image(&filter_image.0, &filter_image.1, &filter_image.2);
 
-        write_image_u8("output/Fallout_hashimg.png", &debug);
+        RGBUnsignedImage::write_image("output/Fallout_hashimg.png", &debug);
     }
 
     fn test_apply_filter() {
@@ -541,8 +541,8 @@ mod tests {
         let debug = debug_filter_image(&filter_img.0, &filter_img.1, &filter_img.2);
         let inferred_y = inference(&hr_y, &filter_img, &read_filter("filters/filterbank"));
         let new_rgb = from_ycbcr(&inferred_y, &hr_cb, &hr_cr);
-        write_image("output/Fallout_inferred.png", &new_rgb);
-        write_image_u8("output/Fallout_hashimg.png", &debug);
+        RGBFloatImage::write_image("output/Fallout_inferred.png", &new_rgb);
+        RGBUnsignedImage::write_image("output/Fallout_hashimg.png", &debug);
     }
 
     fn test_inference() {
@@ -563,8 +563,8 @@ mod tests {
         let debug = debug_filter_image(&filter_image.0, &filter_image.1, &filter_image.2);
         let inferred_y = inference(&hr_y, &filter_image, &read_filter("filters/filterbank"));
         let new_rgb = from_ycbcr(&inferred_y, &hr_cb, &hr_cr);
-        write_image("output/Fallout_inferred.png", &new_rgb);
-        write_image_u8("output/Fallout_hashimg.png", &debug);
+        RGBFloatImage::write_image("output/Fallout_inferred.png", &new_rgb);
+        RGBUnsignedImage::write_image("output/Fallout_hashimg.png", &debug);
     }
 
     fn test_training() {

@@ -5,7 +5,7 @@ use clap::{App, Arg};
 use rusty_raisr::color::{from_ycbcr, to_ycbcr};
 use rusty_raisr::constants::*;
 use rusty_raisr::filters::read_filter;
-use rusty_raisr::image_io::{write_image, write_image_u8, RGBFloatImage, ReadableImage};
+use rusty_raisr::image_io::{RGBFloatImage, RGBUnsignedImage, ReadableImage, WriteableImage};
 use rusty_raisr::raisr::{bilinear_filter, create_filter_image, debug_filter_image, inference};
 
 fn main() {
@@ -65,12 +65,12 @@ fn main() {
     let filter_image = create_filter_image(&hr_y);
     let inferred_y = inference(&hr_y, &filter_image, &read_filter(&filterbank_name));
     let new_rgb = from_ycbcr(&inferred_y, &hr_cb, &hr_cr);
-    write_image(&output_image_name, &new_rgb);
+    RGBFloatImage::write_image(&output_image_name, &new_rgb);
 
     match matches.value_of("debug") {
         Some(debug_file_name) => {
             let debug = debug_filter_image(&filter_image.0, &filter_image.1, &filter_image.2);
-            write_image_u8(debug_file_name, &debug);
+            RGBUnsignedImage::write_image(debug_file_name, &debug);
         }
         _ => {}
     };
