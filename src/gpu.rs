@@ -84,6 +84,7 @@ fn filterbank_to_texture(
 pub fn inference_gpu<'a>(
     input_image: SizedRawImage2d,
     filterbank: &FilterBank,
+    hash_image: Option<SizedRawImage2d>,
 ) -> SizedRawImage2d<'a> {
     let events_loop = glutin::EventsLoop::new();
     let window = glutin::WindowBuilder::new().with_visibility(false);
@@ -101,6 +102,10 @@ pub fn inference_gpu<'a>(
         image_dimensions.1 * R as u32,
     )
     .unwrap();
+    let hash_texture = match hash_image {
+        None => None,
+        Some(hash_image) => glium::texture::Texture2d::new(&display, hash_image.img).ok(),
+    };
 
     let (filterbank_texture, bounds_texture) = filterbank_to_texture(&display, filterbank);
 
@@ -126,19 +131,51 @@ pub fn inference_gpu<'a>(
 
     let now = Instant::now();
 
+    let lr_sampler = input_texture
+        .sampled()
+        .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
+        .minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
+        .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp);
+    let bounds_sampler = bounds_texture
+        .sampled()
+        .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
+        .minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
+        .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp);
+
     for _ in 0..NUM_TRIALS {
-        program.execute(
-            uniform! {
-                lr_image: input_texture.sampled().magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest).minify_filter(glium::uniforms::MinifySamplerFilter::Nearest).wrap_function(glium::uniforms::SamplerWrapFunction::Clamp),
+        let hr_image_object = output_texture
+            .image_unit()
+            .set_format(glium::uniforms::ImageUnitFormat::RGBA8)
+            .set_access(glium::uniforms::ImageUnitAccess::ReadWrite)
+            .set_level(0);
+
+        match &hash_texture {
+            None => program.execute(
+                uniform! {
+                lr_image: lr_sampler,
                 filterbank: &filterbank_texture,
-                bounds: bounds_texture.sampled().magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest).minify_filter(glium::uniforms::MinifySamplerFilter::Nearest).wrap_function(glium::uniforms::SamplerWrapFunction::Clamp),
-                hr_image: output_texture.image_unit().set_format(glium::uniforms::ImageUnitFormat::RGBA8).set_access(glium::uniforms::ImageUnitAccess::ReadWrite).set_level(0),
+                bounds: bounds_sampler,
+                hr_image: hr_image_object,
                 R: R as u32,
-            },
-            (image_dimensions.0 * R as u32) / BLOCK_DIM,
-            (image_dimensions.1 * R as u32) / BLOCK_DIM,
-            1,
-        );
+                },
+                (image_dimensions.0 * R as u32) / BLOCK_DIM,
+                (image_dimensions.1 * R as u32) / BLOCK_DIM,
+                1,
+            ),
+            Some(hash_texture) => program.execute(
+                uniform! {
+                    lr_image: lr_sampler,
+                    filterbank: &filterbank_texture,
+                    bounds: bounds_sampler,
+                    hash_image: hash_texture,
+                    hr_image: hr_image_object,
+                    R: R as u32,
+                },
+                (image_dimensions.0 * R as u32) / BLOCK_DIM,
+                (image_dimensions.1 * R as u32) / BLOCK_DIM,
+                1,
+            ),
+        }
 
         display.memory_barrier(
             glium::backend::MemoryBarrier::SHADER_IMAGE_ACCESS_BARRIER
@@ -166,21 +203,44 @@ pub fn inference_gpu<'a>(
 mod tests {
     use filters::read_filter;
     use gpu::*;
-    use image_io::{ReadableImage, SizedRawImage2d, WriteableImage};
+    use image_io::{
+        convert_to_glium, RGBFloatImage, RGBUnsignedImage, ReadableImage, SizedRawImage2d,
+        WriteableImage,
+    };
+
+    fn perform_inference(
+        input_image_name: &str,
+        output_image_name: &str,
+        hash_img_name: Option<String>,
+    ) {
+        let filterbank = read_filter("filters/filterbank");
+        let input_image = SizedRawImage2d::read_image(input_image_name);
+        let hash_image = match hash_img_name {
+            None => None,
+            Some(hash_img_name) => {
+                let filter_img_raw: RGBFloatImage = RGBFloatImage::read_image(&hash_img_name);
+
+                Some(convert_to_glium(&(
+                    (filter_img_raw.0 * Q_ANGLE as f32).map(|f| f as u8),
+                    (filter_img_raw.1 * Q_STRENGTH as f32).map(|f| f as u8),
+                    (filter_img_raw.2 * Q_COHERENCE as f32).map(|f| f as u8),
+                )))
+            }
+        };
+        SizedRawImage2d::write_image(
+            output_image_name,
+            &inference_gpu(input_image, &filterbank, hash_image),
+        );
+    }
 
     #[test]
     fn test_gpu_inference() {
-        let perform_inference = |input_image_name, output_image_name| {
-            let filterbank = read_filter("filters/filterbank");
-            let input_image = SizedRawImage2d::read_image(input_image_name);
-            SizedRawImage2d::write_image(
-                output_image_name,
-                &inference_gpu(input_image, &filterbank),
-            );
-        };
-
-        //perform_inference("test/Fallout.png", "output/Fallout_gpu_inferred.png");
-        perform_inference("test/veronica.png", "output/veronica_gpu_inferred.png");
-        //perform_inference("test/full_hd.jpg", "output/hull_hd_inferred.png");
+        //perform_inference("test/Fallout.png", "output/Fallout_gpu_inferred.png", None);
+        perform_inference(
+            "test/veronica.png",
+            "output/veronica_gpu_inferred.png",
+            None,
+        );
+        //perform_inference("test/full_hd.jpg", "output/hull_hd_inferred.png", None);
     }
 }
