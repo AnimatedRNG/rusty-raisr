@@ -125,7 +125,7 @@ pub fn convert_to_glium<'a>(img: &RGBUnsignedImage) -> SizedRawImage2d<'a> {
         }
     }
 
-    let dims = (dims.0 as u32, dims.1 as u32);
+    let dims = (dims.1 as u32, dims.0 as u32);
 
     SizedRawImage2d {
         img: RawImage2d::from_raw_rgb_reversed(&Cow::from(&packed), dims),

@@ -335,9 +335,9 @@ void main() {
     vec2 chroma = bilinear_chroma_data[offset.x][offset.y];
 
     //imageStore(hr_image, ivec2(index.xy), sobel);
-    imageStore(hr_image, ivec2(index.xy), vec4(vis.x, vis.y, vis.z, 1.0));
+    //imageStore(hr_image, ivec2(index.xy), vec4(vis.x, vis.y, vis.z, 1.0));
     //imageStore(hr_image, ivec2(index.xy), vec4(accum, accum, accum, 1.0));
-    //imageStore(hr_image, ivec2(index.xy), from_ycbcr(vec4(accum, chroma.r, cb.g, 1.0)));
+    imageStore(hr_image, ivec2(index.xy), from_ycbcr(vec4(accum, chroma.r, chroma.g, 1.0)));
 
     // Verify that filterbank is loaded
     /*int overall = imageSize(hr_image).x * int(index.y) + int(index.x);
