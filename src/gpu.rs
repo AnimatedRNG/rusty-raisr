@@ -104,7 +104,10 @@ pub fn inference_gpu<'a>(
     .unwrap();
     let hash_texture = match hash_image {
         None => None,
-        Some(hash_image) => glium::texture::Texture2d::new(&display, hash_image.img).ok(),
+        Some(hash_image) => {
+            glium::texture::unsigned_texture2d::UnsignedTexture2d::new(&display, hash_image.img)
+                .ok()
+        }
     };
 
     let (filterbank_texture, bounds_texture) = filterbank_to_texture(&display, filterbank);
@@ -156,6 +159,7 @@ pub fn inference_gpu<'a>(
                 filterbank: &filterbank_texture,
                 bounds: bounds_sampler,
                 hr_image: hr_image_object,
+                hash_image_enabled: false,
                 R: R as u32,
                 },
                 (image_dimensions.0 * R as u32) / BLOCK_DIM,
@@ -168,6 +172,7 @@ pub fn inference_gpu<'a>(
                     filterbank: &filterbank_texture,
                     bounds: bounds_sampler,
                     hash_image: hash_texture,
+                    hash_image_enabled: true,
                     hr_image: hr_image_object,
                     R: R as u32,
                 },
@@ -233,7 +238,7 @@ mod tests {
         );
     }
 
-    #[test]
+    //#[test]
     fn test_gpu_inference() {
         //perform_inference("test/Fallout.png", "output/Fallout_gpu_inferred.png", None);
         perform_inference(
@@ -242,5 +247,14 @@ mod tests {
             None,
         );
         //perform_inference("test/full_hd.jpg", "output/hull_hd_inferred.png", None);
+    }
+
+    #[test]
+    fn test_gpu_apply_filter() {
+        perform_inference(
+            "test/veronica.png",
+            "output/veronica_gpu_inferred.png",
+            Some("output/veronica_hashimg.png".to_owned()),
+        );
     }
 }

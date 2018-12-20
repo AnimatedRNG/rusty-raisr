@@ -24,6 +24,8 @@ layout(local_size_x = BLOCK_DIM, local_size_y = BLOCK_DIM, local_size_z = 1) in;
 uniform sampler2D lr_image;
 uniform usamplerBuffer filterbank;
 uniform sampler1D bounds;
+uniform usampler2D hash_image;
+uniform bool hash_image_enabled;
 uniform uint R;
 layout(RGBA8) uniform image2D hr_image;
 
@@ -310,22 +312,32 @@ void main() {
     //vec4 data = bilinear_filter(ivec2(index.xy));
     load_bilinear_into_shared_tiled();
 
-    //ivec2 offset = ivec2(gl_LocalInvocationID.xy) + IMAGE_KERNEL_HALF_SIZE;
+    ivec2 offset = ivec2(gl_LocalInvocationID.xy) + IMAGE_KERNEL_HALF_SIZE;
     //vec4 sobel = vec4(vec2(gradient_xx[offset.x][offset.y], gradient_xy[offset.x][offset.y]), 0.0, 1.0);
 
     /*vec4 weighted_grad = weight_gradient(gl_LocalInvocationID.xy);
     vec2 eval;
     vec4 evec;
     eigendecomposition(weighted_grad, eval, evec);*/
-    uvec4 key = hashkey(gl_LocalInvocationID.xy, gl_WorkGroupID.xy);
+
+    uvec4 key;
+    if (hash_image_enabled) {
+        key = texelFetch(hash_image, ivec2(index.xy), 0);
+    } else {
+        key = hashkey(gl_LocalInvocationID.xy, gl_WorkGroupID.xy);
+    }
+
     float accum = apply_filter(key, gl_LocalInvocationID.xy);
 
     vec4 vis = vec4(key) / vec4(Qangle, Qstrength, Qcoherence, R * R);
     vis.w = 1.0;
 
+    vec2 chroma = bilinear_chroma_data[offset.x][offset.y];
+
     //imageStore(hr_image, ivec2(index.xy), sobel);
-    //imageStore(hr_image, ivec2(index.xy), vec4(vis.x, vis.y, vis.z, 1.0));
-    imageStore(hr_image, ivec2(index.xy), vec4(accum, accum, accum, 1.0));
+    imageStore(hr_image, ivec2(index.xy), vec4(vis.x, vis.y, vis.z, 1.0));
+    //imageStore(hr_image, ivec2(index.xy), vec4(accum, accum, accum, 1.0));
+    //imageStore(hr_image, ivec2(index.xy), from_ycbcr(vec4(accum, chroma.r, cb.g, 1.0)));
 
     // Verify that filterbank is loaded
     /*int overall = imageSize(hr_image).x * int(index.y) + int(index.x);
