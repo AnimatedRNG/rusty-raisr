@@ -13,8 +13,6 @@ use nalgebra::DMatrix;
 use ndarray::prelude::*;
 use rayon::prelude::*;
 
-pub type FilterImage = (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>);
-
 fn get_pixel_clamped(img: &DMatrix<FloatType>, coord: (i64, i64)) -> FloatType {
     let coord = (
         (coord.0.max(0) as usize).min(img.shape().0 - 1),
@@ -89,7 +87,7 @@ pub fn bilinear_filter(img: &DMatrix<FloatType>, ideal_size: (usize, usize)) -> 
 }
 
 // TODO: Refactor using parallel_image_op
-pub fn create_filter_image(hr_y: &DMatrix<FloatType>) -> FilterImage {
+pub fn create_filter_image(hr_y: &DMatrix<FloatType>) -> RGBUnsignedImage {
     let dims = hr_y.shape();
 
     let ideal_size = (dims.0, dims.1);
@@ -157,11 +155,11 @@ pub fn parallel_image_op<T: Send + Sync>(
 
 pub struct TrainImage {
     hr_y: DMatrix<FloatType>,
-    hash_img: FilterImage,
+    hash_img: RGBUnsignedImage,
     y: DMatrix<FloatType>,
 }
 
-fn check_cache(name: &str) -> Option<FilterImage> {
+fn check_cache(name: &str) -> Option<RGBUnsignedImage> {
     if Path::new("cache").exists() {
         let hashimg_filename = Path::new("cache").join(name);
         if hashimg_filename.exists() {
@@ -180,7 +178,7 @@ fn check_cache(name: &str) -> Option<FilterImage> {
     }
 }
 
-fn cache_img(name: &str, image_contents: &FilterImage) {
+fn cache_img(name: &str, image_contents: &RGBUnsignedImage) {
     let path = Path::new("cache");
     if !path.exists() {
         create_dir("cache").expect("Unable to create cache directory!");
@@ -389,7 +387,7 @@ pub fn train_batch(received: TrainImage) -> (ArrayD<FloatType>, ArrayD<FloatType
 
 pub fn inference(
     hr_y: &DMatrix<FloatType>,
-    filter_image: &FilterImage,
+    filter_image: &RGBUnsignedImage,
     filter_bank: &FilterBank,
 ) -> DMatrix<FloatType> {
     let ideal_size = (hr_y.shape().0, hr_y.shape().1);
@@ -521,7 +519,7 @@ mod tests {
         let filter_img_raw: RGBFloatImage = RGBFloatImage::read_image("test/Fallout_filters.png");
         let img = RGBFloatImage::read_image("test/Fallout.png");
 
-        let filter_img: FilterImage = (
+        let filter_img: RGBUnsignedImage = (
             (filter_img_raw.0 * Q_ANGLE as f32).map(|f| f as u8),
             (filter_img_raw.1 * Q_STRENGTH as f32).map(|f| f as u8),
             (filter_img_raw.2 * Q_COHERENCE as f32).map(|f| f as u8),

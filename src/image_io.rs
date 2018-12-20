@@ -3,6 +3,7 @@ use glium::texture::RawImage2d;
 use image;
 use image::GenericImage;
 use nalgebra::DMatrix;
+use std::borrow::Cow;
 use std::fs;
 
 pub type RGBFloatImage = (DMatrix<FloatType>, DMatrix<FloatType>, DMatrix<FloatType>);
@@ -108,5 +109,26 @@ impl<'a> WriteableImage<SizedRawImage2d<'a>> for SizedRawImage2d<'a> {
         let tex_img = image::ImageBuffer::from_raw(image.size.0, image.size.1, tex_data).unwrap();
         let tex_img = image::DynamicImage::ImageRgba8(tex_img).flipv();
         tex_img.save(format!("{}", filename)).unwrap();
+    }
+}
+
+// Would use From, but I don't own either type
+pub fn convert_to_glium<'a>(img: &RGBUnsignedImage) -> SizedRawImage2d<'a> {
+    let mut packed: Vec<u8> = Vec::new();
+    let dims = img.0.shape();
+
+    for i in 0..dims.0 {
+        for j in 0..dims.1 {
+            packed.push(img.0[(i, j)]);
+            packed.push(img.1[(i, j)]);
+            packed.push(img.2[(i, j)]);
+        }
+    }
+
+    let dims = (dims.0 as u32, dims.1 as u32);
+
+    SizedRawImage2d {
+        img: RawImage2d::from_raw_rgb_reversed(&Cow::from(&packed), dims),
+        size: dims,
     }
 }
