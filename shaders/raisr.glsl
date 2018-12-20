@@ -6,7 +6,7 @@
 #define IMAGE_KERNEL_HALF_SIZE 5
 #define GRADIENT_KERNEL_HALF_SIZE 4
 #define ALIGNED_PATCH_ELEMENT_SIZE 4
-#define ALIGNED_PATCH_VEC_SIZE 128
+#define ALIGNED_PATCH_VEC_SIZE 132
 #define ALIGNED_PATCH_VEC_ELEMENTS (ALIGNED_PATCH_VEC_SIZE / ALIGNED_PATCH_ELEMENT_SIZE)
 
 #define M_PI 3.1415926535897932384626433832795
@@ -230,14 +230,14 @@ float apply_filter(uvec4 key, uvec2 upper_left) {
                                            R * R,
                                            1)));*/
     uint base_offset = key.x * Qstrength * Qcoherence * R * R +
-        key.y * Qcoherence * R * R + key.z * R * R + key.w;
+                       key.y * Qcoherence * R * R + key.z * R * R + key.w;
 
-
-    uint bounds_offset = base_offset * 2;
+    uint bounds_offset = base_offset;
     uint fb_offset = base_offset * ALIGNED_PATCH_VEC_ELEMENTS;
 
-    float min_val = texelFetch(bounds, int(bounds_offset), 0).r;
-    float max_val = texelFetch(bounds, int(bounds_offset + 1), 0).r;
+    vec2 minmax = texelFetch(bounds, int(bounds_offset), 0).rg;
+    float min_val = minmax.x;
+    float max_val = minmax.y;
     float span = max_val - min_val;
     uint fb_ptr = fb_offset;
 
@@ -253,9 +253,8 @@ float apply_filter(uvec4 key, uvec2 upper_left) {
 
     float accum = 0.0;
 
-    // TODO: Replace with more vectorized accumulate
     for (uint i = upper_left.x; i < lower_right.x; i++) {
-        for (uint j = upper_left.x; j < lower_right.y; j += 4) {
+        for (uint j = upper_left.y; j < lower_right.y; j += 4) {
             vec4 filters = ((vec4(texelFetch(filterbank, int(fb_ptr)))
                              + 0.5) / 255.0) * span + min_val;
             vec4 seq = vec4(bilinear_data[i][j],

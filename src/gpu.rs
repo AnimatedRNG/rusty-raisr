@@ -13,7 +13,7 @@ use filters::{read_filter, FilterBank};
 
 const BLOCK_DIM: u32 = 8;
 const NUM_TRIALS: usize = 100;
-const ALIGNED_PATCH_VEC_SIZE: usize = 128;
+//const ALIGNED_PATCH_VEC_SIZE: usize = 132;
 const ALIGNED_PATCH_ELEMENT_SIZE: usize = 4;
 
 fn filterbank_to_texture(
@@ -31,40 +31,33 @@ fn filterbank_to_texture(
             for coherence in 0..Q_COHERENCE {
                 for pixel_type in 0..R_2 {
                     let end_index: FloatType =
-                        PATCH_VECTOR_SIZE as FloatType / ALIGNED_PATCH_ELEMENT_SIZE as FloatType;
+                        PATCH_SIZE as FloatType / ALIGNED_PATCH_ELEMENT_SIZE as FloatType;
                     let end_index: usize = end_index.ceil() as usize;
                     let elem_size: usize = ALIGNED_PATCH_ELEMENT_SIZE;
-                    for i in 0..end_index {
-                        let get_ind = |a: usize| {
-                            let ind = elem_size * i + a;
-                            if ind < PATCH_VECTOR_SIZE {
-                                filterbank.0[[angle, strength, coherence, pixel_type, ind]]
-                            } else {
-                                0
-                            }
-                        };
-                        let entry = (get_ind(0), get_ind(1), get_ind(2), get_ind(3));
-                        filterbank_vec.push(entry);
+                    for i in 0..PATCH_SIZE {
+                        for j in 0..end_index {
+                            let get_ind = |a: usize| {
+                                let j = j * elem_size + a;
+                                let ind = i * PATCH_SIZE + j;
+                                if i < PATCH_SIZE && j < PATCH_SIZE {
+                                    filterbank.0[[angle, strength, coherence, pixel_type, ind]]
+                                } else {
+                                    0
+                                }
+                            };
+                            let entry = (get_ind(0), get_ind(1), get_ind(2), get_ind(3));
+                            filterbank_vec.push(entry);
+                        }
                     }
 
                     // Don't need to build this up explcitly, but this is here for readibility
                     bounds_vec.push(filterbank.1[[angle, strength, coherence, pixel_type, 0]]);
                     bounds_vec.push(filterbank.1[[angle, strength, coherence, pixel_type, 1]]);
-
-                    for _ in end_index..ALIGNED_PATCH_VEC_SIZE / ALIGNED_PATCH_ELEMENT_SIZE {
-                        filterbank_vec.push((0, 0, 0, 0));
-                    }
                 }
             }
         }
     }
 
-    /*let raw_filterbank = glium::texture::RawImage1d {
-        data: Cow::from(&filterbank_vec),
-        width: (Q_ANGLE * Q_STRENGTH * Q_COHERENCE * R_2 * ALIGNED_PATCH_VEC_SIZE
-            / ALIGNED_PATCH_ELEMENT_SIZE) as u32,
-        format: glium::texture::ClientFormat::U8U8U8U8,
-    };*/
     let raw_bounds = glium::texture::RawImage1d {
         data: Cow::from(&bounds_vec),
         width: (Q_ANGLE * Q_STRENGTH * Q_COHERENCE * R_2) as u32,
@@ -101,6 +94,7 @@ fn inference_gpu(filename: &str, filterbank: &str, output: &str) {
     let image =
         glium::texture::RawImage2d::from_raw_rgba_reversed(&image.into_raw(), image_dimensions);
 
+    // TODO: Retrain on SRGB
     //let input_texture = glium::texture::SrgbTexture2d::new(&display, image).unwrap();
     let input_texture = glium::texture::Texture2d::new(&display, image).unwrap();
     let output_texture = glium::texture::Texture2d::empty(
@@ -148,7 +142,7 @@ fn inference_gpu(filename: &str, filterbank: &str, output: &str) {
             (image_dimensions.1 * R as u32) / BLOCK_DIM,
             1,
         );
-        
+
         display.memory_barrier(
             glium::backend::MemoryBarrier::SHADER_IMAGE_ACCESS_BARRIER
                 | glium::backend::MemoryBarrier::TEXTURE_UPDATE_BARRIER,
@@ -183,15 +177,15 @@ mod tests {
             "filters/filterbank",
             "output/Fallout_gpu_inferred.png",
         );*/
-        /*inference_gpu(
+        inference_gpu(
             "test/veronica.png",
             "filters/filterbank",
             "output/veronica_gpu_inferred.png",
-        );*/
-        inference_gpu(
+        );
+        /*inference_gpu(
             "test/full_hd.jpg",
             "filters/filterbank",
             "output/full_hd_inferred.png",
-        );
+        );*/
     }
 }
