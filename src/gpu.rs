@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use constants::*;
 use filters::{read_filter, FilterBank};
+use image_io::{ReadableImage, SizedRawImage2d, WriteableImage};
 
 const BLOCK_DIM: u32 = 8;
 const NUM_TRIALS: usize = 100;
@@ -86,13 +87,8 @@ fn inference_gpu(filename: &str, filterbank: &str, output: &str) {
     let context = glutin::ContextBuilder::new();
     let display = glium::Display::new(window, context, &events_loop).unwrap();
 
-    let image = image::open(filename)
-        .expect(&format!("Unable to read image {}", filename))
-        .to_rgba();
-
-    let image_dimensions = image.dimensions();
-    let image =
-        glium::texture::RawImage2d::from_raw_rgba_reversed(&image.into_raw(), image_dimensions);
+    let sized_image = SizedRawImage2d::read_image(filename);
+    let (image, image_dimensions) = (sized_image.img, sized_image.size);
 
     // TODO: Retrain on SRGB
     //let input_texture = glium::texture::SrgbTexture2d::new(&display, image).unwrap();
@@ -158,12 +154,14 @@ fn inference_gpu(filename: &str, filterbank: &str, output: &str) {
     println!("Time elapsed: {}", elapsed / NUM_TRIALS as f32);
 
     let tex_img: glium::texture::RawImage2d<u8> = output_texture.read();
-    let tex_data: Vec<u8> = tex_img.data.into_owned();
-    //let tex_data: &[palette::LinSrgb<u8>] = Pixel::from_raw_slice(&tex_data);
-    //let tex_data = Pixel::into_raw_slice(&tex_data).to_vec();
-    let tex_img = image::ImageBuffer::from_raw(tex_img.width, tex_img.height, tex_data).unwrap();
-    let tex_img = image::DynamicImage::ImageRgba8(tex_img).flipv();
-    tex_img.save(format!("{}", output)).unwrap();
+
+    SizedRawImage2d::write_image(
+        output,
+        &SizedRawImage2d {
+            img: tex_img,
+            size: (output_texture.width(), output_texture.height()),
+        },
+    );
 }
 
 #[cfg(test)]

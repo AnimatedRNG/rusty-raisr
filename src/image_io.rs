@@ -1,4 +1,5 @@
 use constants::FloatType;
+use glium::texture::RawImage2d;
 use image;
 use image::GenericImage;
 use nalgebra::DMatrix;
@@ -6,6 +7,10 @@ use std::fs;
 
 pub type RGBFloatImage = (DMatrix<FloatType>, DMatrix<FloatType>, DMatrix<FloatType>);
 pub type RGBUnsignedImage = (DMatrix<u8>, DMatrix<u8>, DMatrix<u8>);
+pub struct SizedRawImage2d<'a> {
+    pub img: RawImage2d<'a, u8>,
+    pub size: (u32, u32),
+}
 
 pub trait ReadableImage<T> {
     fn read_image(filename: &str) -> T;
@@ -33,6 +38,24 @@ impl ReadableImage<RGBFloatImage> for RGBFloatImage {
         }
 
         (red.transpose(), green.transpose(), blue.transpose())
+    }
+}
+
+impl<'a> ReadableImage<SizedRawImage2d<'a>> for SizedRawImage2d<'a> {
+    fn read_image(filename: &str) -> SizedRawImage2d<'a> {
+        let image = image::open(filename)
+            .expect(&format!("Unable to read image {}", filename))
+            .to_rgba();
+
+        let image_dimensions = image.dimensions();
+
+        SizedRawImage2d {
+            img: glium::texture::RawImage2d::from_raw_rgba_reversed(
+                &image.into_raw(),
+                image_dimensions,
+            ),
+            size: image_dimensions,
+        }
     }
 }
 
@@ -73,5 +96,17 @@ impl WriteableImage<RGBUnsignedImage> for RGBUnsignedImage {
             });
 
         buffer.save(filename).unwrap();
+    }
+}
+
+impl<'a> WriteableImage<SizedRawImage2d<'a>> for SizedRawImage2d<'a> {
+    fn write_image(filename: &str, image: &SizedRawImage2d<'a>) {
+        let tex_data = image.img.data.to_vec();
+        //let tex_data: &[palette::LinSrgb<u8>] = Pixel::from_raw_slice(&tex_data);
+        //let tex_data = Pixel::into_raw_slice(&tex_data).to_vec();
+
+        let tex_img = image::ImageBuffer::from_raw(image.size.0, image.size.1, tex_data).unwrap();
+        let tex_img = image::DynamicImage::ImageRgba8(tex_img).flipv();
+        tex_img.save(format!("{}", filename)).unwrap();
     }
 }
