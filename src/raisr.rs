@@ -6,7 +6,7 @@ use cgls::cgls;
 use constants::*;
 use filters::{apply_filter, write_filter, FilterBank};
 use hashkey::hashkey;
-use image_io::{read_image, write_image_u8};
+use image_io::{write_image_u8, RGBFloatImage, ReadableImage};
 use itertools::Itertools;
 use nalgebra;
 use nalgebra::DMatrix;
@@ -165,7 +165,7 @@ fn check_cache(name: &str) -> Option<FilterImage> {
     if Path::new("cache").exists() {
         let hashimg_filename = Path::new("cache").join(name);
         if hashimg_filename.exists() {
-            let filter_img_raw = read_image(hashimg_filename.to_str().unwrap());
+            let filter_img_raw = RGBFloatImage::read_image(hashimg_filename.to_str().unwrap());
 
             Some((
                 (filter_img_raw.0 * Q_ANGLE as f32).map(|f| f as u8),
@@ -253,8 +253,8 @@ pub fn training_generator(hr_folder: &str, lr_folder: &str, output_file: &str) {
                     "Found training pair: {} {}",
                     hr_entry.1, lr_names[hr_entry.0]
                 );
-                let hr_img = read_image(&hr_entry.1);
-                let lr_img = read_image(&lr_names[hr_entry.0]);
+                let hr_img = RGBFloatImage::read_image(&hr_entry.1);
+                let lr_img = RGBFloatImage::read_image(&lr_names[hr_entry.0]);
                 println!("Finished reading {}", hr_entry.0);
 
                 let (label_hr_y, _, _) = hr_img;
@@ -452,7 +452,7 @@ mod tests {
     use color::{from_ycbcr, to_ycbcr};
     use constants::*;
     use filters::*;
-    use image_io::{read_image, write_image, write_image_u8};
+    use image_io::{write_image, write_image_u8, RGBFloatImage, ReadableImage};
     use raisr::*;
     use std::thread;
 
@@ -463,19 +463,19 @@ mod tests {
         //test_patch();
         //test_hash_image();
         //test_apply_filter();
-        //test_inference();
-        test_training();
+        test_inference();
+        //test_training();
     }
 
     fn test_create_filter_image() {
-        let (r, g, b) = read_image("test/veronica.jpg");
+        let (r, g, b) = RGBFloatImage::read_image("test/veronica.jpg");
         let (y, cb, cr) = to_ycbcr(&r, &g, &b);
         let (r, g, b) = from_ycbcr(&y, &cb, &cr);
         write_image("output/veronica_result.png", &(r, g, b));
     }
 
     fn test_bilinear_filter_image() {
-        let (r, g, b) = read_image("test/veronica.jpg");
+        let (r, g, b) = RGBFloatImage::read_image("test/veronica.jpg");
         let (y, cb, cr) = to_ycbcr(&r, &g, &b);
 
         let lr_dims = (r.shape().0 * 2, r.shape().1 * 2);
@@ -488,7 +488,7 @@ mod tests {
     }
 
     fn test_patch() {
-        let img = read_image("test/Fallout.png");
+        let img = RGBFloatImage::read_image("test/Fallout.png");
         let (r, g, b) = img;
         let (y, _, _) = to_ycbcr(&r, &g, &b);
         let dims = y.shape();
@@ -500,7 +500,7 @@ mod tests {
     }
 
     fn test_hash_image() {
-        let img = read_image("test/Fallout.png");
+        let img = RGBFloatImage::read_image("test/Fallout.png");
 
         let (r, g, b) = img;
         let (y, _, _) = to_ycbcr(&r, &g, &b);
@@ -518,8 +518,8 @@ mod tests {
     }
 
     fn test_apply_filter() {
-        let filter_img_raw = read_image("test/Fallout_filters.png");
-        let img = read_image("test/Fallout.png");
+        let filter_img_raw: RGBFloatImage = RGBFloatImage::read_image("test/Fallout_filters.png");
+        let img = RGBFloatImage::read_image("test/Fallout.png");
 
         let filter_img: FilterImage = (
             (filter_img_raw.0 * Q_ANGLE as f32).map(|f| f as u8),
@@ -546,7 +546,7 @@ mod tests {
     }
 
     fn test_inference() {
-        let img = read_image("test/Fallout.png");
+        let img = RGBFloatImage::read_image("test/Fallout.png");
 
         let (r, g, b) = img;
         let (y, cb, cr) = to_ycbcr(&r, &g, &b);

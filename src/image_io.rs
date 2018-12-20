@@ -4,23 +4,31 @@ use image::GenericImage;
 use nalgebra::DMatrix;
 use std::fs;
 
-pub fn read_image(filename: &str) -> (DMatrix<FloatType>, DMatrix<FloatType>, DMatrix<FloatType>) {
-    let img = image::open(filename).expect(&format!("Unable to read image {}", filename));
-    let dims = img.dimensions();
-    let (mut red, mut green, mut blue) = (
-        DMatrix::zeros(dims.0 as usize, dims.1 as usize),
-        DMatrix::zeros(dims.0 as usize, dims.1 as usize),
-        DMatrix::zeros(dims.0 as usize, dims.1 as usize),
-    );
+pub type RGBFloatImage = (DMatrix<FloatType>, DMatrix<FloatType>, DMatrix<FloatType>);
 
-    for (x_i, y_i, pixel) in img.pixels() {
-        let (x, y) = (x_i as usize, y_i as usize);
-        red[(x, y)] = pixel[0] as FloatType / 255.0;
-        green[(x, y)] = pixel[1] as FloatType / 255.0;
-        blue[(x, y)] = pixel[2] as FloatType / 255.0;
+pub trait ReadableImage<T> {
+    fn read_image(filename: &str) -> T;
+}
+
+impl ReadableImage<RGBFloatImage> for RGBFloatImage {
+    fn read_image(filename: &str) -> RGBFloatImage {
+        let img = image::open(filename).expect(&format!("Unable to read image {}", filename));
+        let dims = img.dimensions();
+        let (mut red, mut green, mut blue): RGBFloatImage = (
+            DMatrix::<FloatType>::zeros(dims.0 as usize, dims.1 as usize),
+            DMatrix::<FloatType>::zeros(dims.0 as usize, dims.1 as usize),
+            DMatrix::<FloatType>::zeros(dims.0 as usize, dims.1 as usize),
+        );
+
+        for (x_i, y_i, pixel) in img.pixels() {
+            let (x, y) = (x_i as usize, y_i as usize);
+            red[(x, y)] = pixel[0] as FloatType / 255.0;
+            green[(x, y)] = pixel[1] as FloatType / 255.0;
+            blue[(x, y)] = pixel[2] as FloatType / 255.0;
+        }
+
+        (red.transpose(), green.transpose(), blue.transpose())
     }
-
-    (red.transpose(), green.transpose(), blue.transpose())
 }
 
 pub fn write_image(

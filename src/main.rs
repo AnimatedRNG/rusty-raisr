@@ -5,7 +5,7 @@ use clap::{App, Arg};
 use rusty_raisr::color::{from_ycbcr, to_ycbcr};
 use rusty_raisr::constants::*;
 use rusty_raisr::filters::read_filter;
-use rusty_raisr::image_io::{read_image, write_image, write_image_u8};
+use rusty_raisr::image_io::{write_image, write_image_u8, RGBFloatImage, ReadableImage};
 use rusty_raisr::raisr::{bilinear_filter, create_filter_image, debug_filter_image, inference};
 
 fn main() {
@@ -47,7 +47,7 @@ fn main() {
     let filterbank_name: String = matches.value_of("filterbank").unwrap().to_owned();
 
     let input_image_name: String = matches.value_of("input").unwrap().to_owned();
-    let input_image = read_image(&input_image_name);
+    let input_image = RGBFloatImage::read_image(&input_image_name);
 
     let output_image_name: String = matches.value_of("output").unwrap().to_owned();
 
