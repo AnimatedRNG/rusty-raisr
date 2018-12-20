@@ -1,6 +1,8 @@
 #version 430
 
 //#pragma optionNV(unroll all)
+//#pragma optionNV(fastmath off)
+//#pragma optionNV(fastprecision off)
 
 #define BLOCK_DIM
 #define IMAGE_KERNEL_HALF_SIZE 5
@@ -255,7 +257,8 @@ float apply_filter(uvec4 key, uvec2 upper_left) {
 
     float accum = 0.0;
 
-    for (uint j = upper_left.y; j < lower_right.y; j++) {
+    for (uint j_r = kernel_offset - 1; j_r >= 0; j_r--) {
+        uint j = j_r + upper_left.y;
         for (uint i = upper_left.x; i < lower_right.x; i += 4) {
             vec4 filters = ((vec4(texelFetch(filterbank, int(fb_ptr)))
                              + 0.5) / 255.0) * span + min_val;
@@ -322,7 +325,11 @@ void main() {
 
     uvec4 key;
     if (hash_image_enabled) {
+        uvec2 mod_val = (gl_WorkGroupID.xy * BLOCK_DIM + gl_LocalInvocationID.xy -
+                         IMAGE_KERNEL_HALF_SIZE);
+        uint pixel_type = uint(mod(mod_val.x, R) * R) + uint(mod(mod_val.y, R));
         key = texelFetch(hash_image, ivec2(index.xy), 0);
+        key.w = pixel_type;
     } else {
         key = hashkey(gl_LocalInvocationID.xy, gl_WorkGroupID.xy);
     }
