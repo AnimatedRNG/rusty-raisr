@@ -249,20 +249,20 @@ float apply_filter(uvec4 key, uvec2 upper_left) {
     // Accounts for some alignment issues
     // NOTE: EXCLUSIVE BOUND
     uvec2 lower_right =
-        uvec2(upper_left.x + kernel_offset,
-              upper_left.y + kernel_offset - uint(mod(kernel_offset,
-                      ALIGNED_PATCH_ELEMENT_SIZE)));
+        uvec2(upper_left.x + kernel_offset - uint(mod(kernel_offset,
+                ALIGNED_PATCH_ELEMENT_SIZE)),
+              upper_left.y + kernel_offset);
 
     float accum = 0.0;
 
-    for (uint i = upper_left.x; i < lower_right.x; i++) {
-        for (uint j = upper_left.y; j < lower_right.y; j += 4) {
+    for (uint j = upper_left.y; j < lower_right.y; j++) {
+        for (uint i = upper_left.x; i < lower_right.x; i += 4) {
             vec4 filters = ((vec4(texelFetch(filterbank, int(fb_ptr)))
                              + 0.5) / 255.0) * span + min_val;
             vec4 seq = vec4(bilinear_data[i][j],
-                            bilinear_data[i][j + 1],
-                            bilinear_data[i][j + 2],
-                            bilinear_data[i][j + 3]);
+                            bilinear_data[i + 1][j],
+                            bilinear_data[i + 2][j],
+                            bilinear_data[i + 3][j]);
 
             accum += dot(seq, filters);
             fb_ptr++;
@@ -271,9 +271,9 @@ float apply_filter(uvec4 key, uvec2 upper_left) {
         // TODO: Properly handle different cases here
         vec3 filters = ((vec3(texelFetch(filterbank, int(fb_ptr)))
                          + 0.5) / 255.0) * span + min_val;
-        vec3 seq = vec3(bilinear_data[i][lower_right.y],
-                        bilinear_data[i][lower_right.y + 1],
-                        bilinear_data[i][lower_right.y + 2]);
+        vec3 seq = vec3(bilinear_data[lower_right.x][j],
+                        bilinear_data[lower_right.x + 1][j],
+                        bilinear_data[lower_right.x + 2][j]);
         accum += dot(seq, filters);
         fb_ptr++;
     }
@@ -337,7 +337,8 @@ void main() {
     //imageStore(hr_image, ivec2(index.xy), sobel);
     //imageStore(hr_image, ivec2(index.xy), vec4(vis.x, vis.y, vis.z, 1.0));
     //imageStore(hr_image, ivec2(index.xy), vec4(accum, accum, accum, 1.0));
-    imageStore(hr_image, ivec2(index.xy), from_ycbcr(vec4(accum, chroma.r, chroma.g, 1.0)));
+    imageStore(hr_image, ivec2(index.xy), from_ycbcr(vec4(accum, chroma.r, chroma.g,
+               1.0)));
 
     // Verify that filterbank is loaded
     /*int overall = imageSize(hr_image).x * int(index.y) + int(index.x);
