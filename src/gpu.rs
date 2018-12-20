@@ -81,14 +81,16 @@ fn filterbank_to_texture(
     )
 }
 
-fn inference_gpu(filename: &str, filterbank: &str, output: &str) {
+pub fn inference_gpu<'a>(
+    input_image: SizedRawImage2d,
+    filterbank: &FilterBank,
+) -> SizedRawImage2d<'a> {
     let events_loop = glutin::EventsLoop::new();
     let window = glutin::WindowBuilder::new().with_visibility(false);
     let context = glutin::ContextBuilder::new();
     let display = glium::Display::new(window, context, &events_loop).unwrap();
 
-    let sized_image = SizedRawImage2d::read_image(filename);
-    let (image, image_dimensions) = (sized_image.img, sized_image.size);
+    let (image, image_dimensions) = (input_image.img, input_image.size);
 
     // TODO: Retrain on SRGB
     //let input_texture = glium::texture::SrgbTexture2d::new(&display, image).unwrap();
@@ -100,8 +102,7 @@ fn inference_gpu(filename: &str, filterbank: &str, output: &str) {
     )
     .unwrap();
 
-    let (filterbank_texture, bounds_texture) =
-        filterbank_to_texture(&display, &read_filter(filterbank));
+    let (filterbank_texture, bounds_texture) = filterbank_to_texture(&display, filterbank);
 
     let mut raisr_shader_file = File::open("shaders/raisr.glsl").expect("Can't find raisr.glsl!");
     let mut raisr_shader = String::new();
@@ -155,35 +156,31 @@ fn inference_gpu(filename: &str, filterbank: &str, output: &str) {
 
     let tex_img: glium::texture::RawImage2d<u8> = output_texture.read();
 
-    SizedRawImage2d::write_image(
-        output,
-        &SizedRawImage2d {
-            img: tex_img,
-            size: (output_texture.width(), output_texture.height()),
-        },
-    );
+    SizedRawImage2d {
+        img: tex_img,
+        size: (output_texture.width(), output_texture.height()),
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use filters::read_filter;
     use gpu::*;
+    use image_io::{ReadableImage, SizedRawImage2d, WriteableImage};
 
     #[test]
     fn test_gpu_inference() {
-        /*inference_gpu(
-            "test/Fallout.png",
-            "filters/filterbank",
-            "output/Fallout_gpu_inferred.png",
-        );*/
-        inference_gpu(
-            "test/veronica.png",
-            "filters/filterbank",
-            "output/veronica_gpu_inferred.png",
-        );
-        /*inference_gpu(
-            "test/full_hd.jpg",
-            "filters/filterbank",
-            "output/full_hd_inferred.png",
-        );*/
+        let perform_inference = |input_image_name, output_image_name| {
+            let filterbank = read_filter("filters/filterbank");
+            let input_image = SizedRawImage2d::read_image(input_image_name);
+            SizedRawImage2d::write_image(
+                output_image_name,
+                &inference_gpu(input_image, &filterbank),
+            );
+        };
+
+        //perform_inference("test/Fallout.png", "output/Fallout_gpu_inferred.png");
+        perform_inference("test/veronica.png", "output/veronica_gpu_inferred.png");
+        //perform_inference("test/full_hd.jpg", "output/hull_hd_inferred.png");
     }
 }
