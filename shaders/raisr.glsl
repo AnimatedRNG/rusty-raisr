@@ -257,8 +257,7 @@ float apply_filter(uvec4 key, uvec2 upper_left) {
 
     float accum = 0.0;
 
-    for (uint j_r = kernel_offset - 1; j_r >= 0; j_r--) {
-        uint j = j_r + upper_left.y;
+    for (uint j = upper_left.y; j < lower_right.y; j++) {
         for (uint i = upper_left.x; i < lower_right.x; i += 4) {
             vec4 filters = ((vec4(texelFetch(filterbank, int(fb_ptr)))
                              + 0.5) / 255.0) * span + min_val;
@@ -346,6 +345,11 @@ void main() {
     //imageStore(hr_image, ivec2(index.xy), vec4(accum, accum, accum, 1.0));
     imageStore(hr_image, ivec2(index.xy), from_ycbcr(vec4(accum, chroma.r, chroma.g,
                1.0)));
+
+    /*if (mod(gl_LocalInvocationID.x, BLOCK_DIM) == 0 ||
+            mod(gl_LocalInvocationID.y, BLOCK_DIM) == 0) {
+        imageStore(hr_image, ivec2(index.xy), vec4(0.0, 1.0, 0.0, 1.0));
+        }*/
 
     // Verify that filterbank is loaded
     /*int overall = imageSize(hr_image).x * int(index.y) + int(index.x);

@@ -176,8 +176,10 @@ pub fn inference_gpu<'a>(
                     hr_image: hr_image_object,
                     R: R as u32,
                 },
-                (image_dimensions.0 * R as u32) / BLOCK_DIM,
-                (image_dimensions.1 * R as u32) / BLOCK_DIM,
+                ((image_dimensions.0 as FloatType * R as FloatType) / BLOCK_DIM as FloatType).ceil()
+                    as u32,
+                ((image_dimensions.1 as FloatType * R as FloatType) / BLOCK_DIM as FloatType).ceil()
+                    as u32,
                 1,
             ),
         }
@@ -238,7 +240,7 @@ mod tests {
         );
     }
 
-    //#[test]
+    #[test]
     fn test_gpu_inference() {
         //perform_inference("test/Fallout.png", "output/Fallout_gpu_inferred.png", None);
         perform_inference(
@@ -251,6 +253,11 @@ mod tests {
 
     #[test]
     fn test_gpu_apply_filter() {
+        /*perform_inference(
+            "test/Fallout.png",
+            "output/Fallout_gpu_inferred.png",
+            Some("output/Fallout_hashimg.png".to_owned()),
+        );*/
         perform_inference(
             "test/veronica.png",
             "output/veronica_gpu_inferred.png",

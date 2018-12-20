@@ -51,10 +51,7 @@ impl<'a> ReadableImage<SizedRawImage2d<'a>> for SizedRawImage2d<'a> {
         let image_dimensions = image.dimensions();
 
         SizedRawImage2d {
-            img: glium::texture::RawImage2d::from_raw_rgba_reversed(
-                &image.into_raw(),
-                image_dimensions,
-            ),
+            img: glium::texture::RawImage2d::from_raw_rgba(image.into_raw(), image_dimensions),
             size: image_dimensions,
         }
     }
@@ -107,7 +104,7 @@ impl<'a> WriteableImage<SizedRawImage2d<'a>> for SizedRawImage2d<'a> {
         //let tex_data = Pixel::into_raw_slice(&tex_data).to_vec();
 
         let tex_img = image::ImageBuffer::from_raw(image.size.0, image.size.1, tex_data).unwrap();
-        let tex_img = image::DynamicImage::ImageRgba8(tex_img).flipv();
+        let tex_img = image::DynamicImage::ImageRgba8(tex_img);
         tex_img.save(format!("{}", filename)).unwrap();
     }
 }
@@ -128,7 +125,7 @@ pub fn convert_to_glium<'a>(img: &RGBUnsignedImage) -> SizedRawImage2d<'a> {
     let dims = (dims.1 as u32, dims.0 as u32);
 
     SizedRawImage2d {
-        img: RawImage2d::from_raw_rgb_reversed(&Cow::from(&packed), dims),
+        img: RawImage2d::from_raw_rgb(packed, dims),
         size: dims,
     }
 }
