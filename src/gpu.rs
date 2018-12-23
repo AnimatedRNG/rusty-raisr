@@ -13,7 +13,7 @@ use filters::{read_filter, FilterBank};
 use image_io::{ReadableImage, SizedRawImage2d, WriteableImage};
 
 const BLOCK_DIM: u32 = 8;
-const NUM_TRIALS: usize = 1;
+const NUM_TRIALS: usize = 100;
 //const ALIGNED_PATCH_VEC_SIZE: usize = 132;
 const ALIGNED_PATCH_ELEMENT_SIZE: usize = 4;
 
@@ -256,7 +256,7 @@ pub fn inference_gpu<'a>(
 
     if configuration.benchmark {
         let elapsed = elapsed / NUM_TRIALS as f32;
-        let pixels_per_second = (output_texture.width() * output_texture.height()) as f32 / elapsed;
+        let pixels_per_second = (output_texture.width() * output_texture.height()) as f32 / (elapsed / 1000.0);
         println!("Time elapsed: {}", elapsed);
         println!(
             "MP/s (destination space): {}",
@@ -333,6 +333,10 @@ mod tests {
             "test/veronica.png",
             "output/veronica_gpu_inferred.png",
             Some("output/veronica_hashimg.png".to_owned()),
+        );
+        perform_inference("test/full_hd.png",
+                          "output/full_hd_inferred.png",
+                          Some("output/full_hd_hashimg.png".to_owned())
         );
     }
 }
