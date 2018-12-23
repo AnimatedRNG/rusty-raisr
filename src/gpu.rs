@@ -255,7 +255,13 @@ pub fn inference_gpu<'a>(
     let elapsed: f32 = elapsed.as_secs() as f32 * 1000.0 + elapsed.subsec_millis() as f32;
 
     if configuration.benchmark {
-        println!("Time elapsed: {}", elapsed / NUM_TRIALS as f32);
+        let elapsed = elapsed / NUM_TRIALS as f32;
+        let pixels_per_second = (output_texture.width() * output_texture.height()) as f32 / elapsed;
+        println!("Time elapsed: {}", elapsed);
+        println!(
+            "MP/s (destination space): {}",
+            pixels_per_second / 1000000.0
+        )
     }
 
     let tex_img: glium::texture::RawImage2d<u8> = output_texture.read();
