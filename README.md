@@ -2,15 +2,17 @@
 
 This tool upscales images using Google's RAISR algorithm.
 
-_TODO_: Implement the training part of the algorithm. Currently, this tool uses a filterbank that is exported from movehand's [Python implementation](https://github.com/movehand/raisr).
+_TODO_: Finish the training part of the algorithm. Currently, this tool uses a filterbank that is exported from movehand's [Python implementation](https://github.com/movehand/raisr).
 
 # Usage
 
 ```
 USAGE:
-    rusty_raisr [OPTIONS] <input> <output>
+    rusty_raisr [FLAGS] [OPTIONS] <input> <output>
 
 FLAGS:
+    -b               Benchmark GPU performance
+    -g               Whether or not to use the GPU
     -h, --help       Prints help information
     -V, --version    Prints version information
 
@@ -23,7 +25,9 @@ ARGS:
     <output>    Output image
 ```
 
-The "filter image" is a useful tool for visualizing which filter will be used per pixel.
+The `-g` option uses an OpenGL compute shader to perform both the hashing and upsampling steps. You will need OpenGL 4.3 or higher. This backend is still a WIP -- there are a variety of small optimizations that I have not tried yet.
+
+The "filter image" is a useful tool for visualizing which filter will be used per pixel. This feature does not work with the GPU backend.
 
 ![nearest neighbor, bicubic, and RAISR](img/comparison.png)
 
