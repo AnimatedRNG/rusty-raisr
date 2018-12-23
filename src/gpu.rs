@@ -13,9 +13,15 @@ use filters::{read_filter, FilterBank};
 use image_io::{ReadableImage, SizedRawImage2d, WriteableImage};
 
 const BLOCK_DIM: u32 = 8;
-const NUM_TRIALS: usize = 100;
+const NUM_TRIALS: usize = 1;
 //const ALIGNED_PATCH_VEC_SIZE: usize = 132;
 const ALIGNED_PATCH_ELEMENT_SIZE: usize = 4;
+
+pub struct GLSLConfiguration {
+    benchmark: bool,
+    gradient_gather_unroll: bool,
+    unroll_loops: bool,
+}
 
 fn filterbank_to_texture(
     display: &glium::backend::Facade,
@@ -85,6 +91,7 @@ pub fn inference_gpu<'a>(
     input_image: SizedRawImage2d,
     filterbank: &FilterBank,
     hash_image: Option<SizedRawImage2d>,
+    configuration: &GLSLConfiguration,
 ) -> SizedRawImage2d<'a> {
     let events_loop = glutin::EventsLoop::new();
     let window = glutin::WindowBuilder::new().with_visibility(false);
@@ -128,7 +135,25 @@ pub fn inference_gpu<'a>(
         &format!("#define BLOCK_DIM {}", BLOCK_DIM),
     );
 
-    let raisr_shader = raisr_shader.replace("#define GRADIENT_GATHER", &gradient_gather_shader);
+    let mut raisr_shader = raisr_shader.replace("#define GRADIENT_GATHER", &gradient_gather_shader);
+
+    {
+        let mut set_shader_toggle = |name: &str, value: bool| {
+            let value_int = if value { 1 } else { 0 };
+            raisr_shader = raisr_shader.replace(
+                &format!("#define {} 0", name),
+                &format!("#define {} {}", name, value_int),
+            )
+        };
+
+        set_shader_toggle("HASH_IMAGE_ENABLED", hash_texture.is_some());
+        set_shader_toggle(
+            "GATHER_UNROLL_ENABLED",
+            configuration.gradient_gather_unroll,
+        );
+        set_shader_toggle("UNROLL_LOOPS", configuration.unroll_loops);
+    }
+    //println!("Shader: {}", raisr_shader);
 
     let program = glium::program::ComputeShader::from_source(&display, &raisr_shader).unwrap();
 
@@ -168,7 +193,13 @@ pub fn inference_gpu<'a>(
         .minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
         .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp);
 
-    for _ in 0..NUM_TRIALS {
+    let num_trials = if configuration.benchmark {
+        NUM_TRIALS
+    } else {
+        0
+    };
+
+    for _ in 0..num_trials {
         let hr_image_object = output_texture
             .image_unit()
             .set_format(glium::uniforms::ImageUnitFormat::RGBA8)
@@ -198,7 +229,6 @@ pub fn inference_gpu<'a>(
                     filterbank: &filterbank_texture,
                     bounds: bounds_sampler,
                     hash_image: hash_texture,
-                    hash_image_enabled: true,
                     hr_image: hr_image_object,
                     R: R as u32,
                     GaussianWeights: &weight_buffer,
@@ -223,7 +253,10 @@ pub fn inference_gpu<'a>(
     let elapsed = now.elapsed();
 
     let elapsed: f32 = elapsed.as_secs() as f32 * 1000.0 + elapsed.subsec_millis() as f32;
-    println!("Time elapsed: {}", elapsed / NUM_TRIALS as f32);
+
+    if configuration.benchmark {
+        println!("Time elapsed: {}", elapsed / NUM_TRIALS as f32);
+    }
 
     let tex_img: glium::texture::RawImage2d<u8> = output_texture.read();
 
@@ -247,6 +280,11 @@ mod tests {
         output_image_name: &str,
         hash_img_name: Option<String>,
     ) {
+        let config = GLSLConfiguration {
+            benchmark: true,
+            gradient_gather_unroll: true,
+            unroll_loops: false,
+        };
         let filterbank = read_filter("filters/filterbank");
         let input_image = SizedRawImage2d::read_image(input_image_name);
         let hash_image = match hash_img_name {
@@ -263,7 +301,7 @@ mod tests {
         };
         SizedRawImage2d::write_image(
             output_image_name,
-            &inference_gpu(input_image, &filterbank, hash_image),
+            &inference_gpu(input_image, &filterbank, hash_image, &config),
         );
     }
 
@@ -275,7 +313,7 @@ mod tests {
             "output/veronica_gpu_inferred.png",
             None,
         );
-        //perform_inference("test/full_hd.jpg", "output/hull_hd_inferred.png", None);
+        perform_inference("test/full_hd.png", "output/full_hd_inferred.png", None);
     }
 
     #[test]

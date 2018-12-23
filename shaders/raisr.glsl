@@ -1,8 +1,12 @@
 #version 430
 
-//#pragma optionNV(unroll all)
-//#pragma optionNV(fastmath off)
-//#pragma optionNV(fastprecision off)
+#define HASH_IMAGE_ENABLED 0
+#define GATHER_UNROLL_ENABLED 0
+#define UNROLL_LOOPS 0
+
+#ifdef UNROLL_LOOPS
+#pragma optionNV(unroll all)
+#endif
 
 #define BLOCK_DIM
 #define IMAGE_KERNEL_HALF_SIZE 5
@@ -30,7 +34,6 @@ uniform sampler2D lr_image;
 uniform usamplerBuffer filterbank;
 uniform sampler1D bounds;
 uniform usampler2D hash_image;
-uniform bool hash_image_enabled;
 uniform uint R;
 layout(RGBA8) uniform image2D hr_image;
 
@@ -51,7 +54,7 @@ shared float gradient_yy[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
 
 #define GRADIENT_GATHER
 
-#line 41
+#line 55
 
 vec4 to_ycbcr(in vec4 inp) {
     return vec4(dot(inp, vec4(0.299, 0.587, 0.114, 0.0)),
@@ -148,14 +151,16 @@ void load_bilinear_into_shared_tiled() {
 }
 
 vec4 weight_gradient(uvec2 upper_left) {
-    // The reason why this is the case is quite confusing
     uvec2 center = upper_left + GRADIENT_KERNEL_HALF_SIZE;
     uvec2 lower_right = upper_left + GRADIENT_KERNEL_HALF_SIZE * 2;
 
     // G @ W @ G.T
     vec3 undecomposed = vec3(0.0, 0.0, 0.0);
-    //GRADIENT_GATHER()
 
+#if GATHER_UNROLL_ENABLED
+    GRADIENT_GATHER()
+#else
+    // TODO: Actually fix this path...
     uint weight_index = 0;
     for (uint i = upper_left.x; i <= lower_right.x; i++) {
         for (uint j = upper_left.y; j <= lower_right.y; j++) {
@@ -164,6 +169,7 @@ vec4 weight_gradient(uvec2 upper_left) {
                                  gradient_yy[i][j]) * weights[weight_index++];
         }
     }
+#endif
 
     return vec4(undecomposed.x, undecomposed.y,
                 undecomposed.y, undecomposed.z);
@@ -342,23 +348,17 @@ void main() {
     load_bilinear_into_shared_tiled();
 
     ivec2 offset = ivec2(gl_LocalInvocationID.xy) + IMAGE_KERNEL_HALF_SIZE;
-    //vec4 sobel = vec4(vec2(gradient_xx[offset.x][offset.y], gradient_xy[offset.x][offset.y]), 0.0, 1.0);
-
-    /*vec4 weighted_grad = weight_gradient(gl_LocalInvocationID.xy);
-    vec2 eval;
-    vec4 evec;
-    eigendecomposition(weighted_grad, eval, evec);*/
 
     uvec4 key;
-    if (hash_image_enabled) {
-        uvec2 mod_val = (gl_WorkGroupID.xy * BLOCK_DIM + gl_LocalInvocationID.xy -
-                         IMAGE_KERNEL_HALF_SIZE);
-        uint pixel_type = uint(mod(mod_val.x, R) * R) + uint(mod(mod_val.y, R));
-        key = texelFetch(hash_image, ivec2(index.xy), 0);
-        key.w = pixel_type;
-    } else {
-        key = hashkey(gl_LocalInvocationID.xy, gl_WorkGroupID.xy);
-    }
+#if HASH_IMAGE_ENABLED
+    uvec2 mod_val = (gl_WorkGroupID.xy * BLOCK_DIM + gl_LocalInvocationID.xy -
+                     IMAGE_KERNEL_HALF_SIZE);
+    uint pixel_type = uint(mod(mod_val.x, R) * R) + uint(mod(mod_val.y, R));
+    key = texelFetch(hash_image, ivec2(index.xy), 0);
+    key.w = pixel_type;
+#else
+    key = hashkey(gl_LocalInvocationID.xy, gl_WorkGroupID.xy);
+#endif
 
     float accum = apply_filter(key, gl_LocalInvocationID.xy);
 
@@ -367,7 +367,6 @@ void main() {
 
     vec2 chroma = bilinear_chroma_data[offset.x][offset.y];
 
-    //imageStore(hr_image, ivec2(index.xy), sobel);
     //imageStore(hr_image, ivec2(index.xy), vec4(vis.x, vis.y, vis.z, 1.0));
     //imageStore(hr_image, ivec2(index.xy), vec4(accum, accum, accum, 1.0));
     imageStore(hr_image, ivec2(index.xy), from_ycbcr(vec4(accum, chroma.r, chroma.g,
@@ -377,12 +376,6 @@ void main() {
             mod(gl_LocalInvocationID.y, BLOCK_DIM) == 0) {
         imageStore(hr_image, ivec2(index.xy), vec4(0.0, 1.0, 0.0, 1.0));
         }*/
-
-    // Verify that filterbank is loaded
-    /*int overall = imageSize(hr_image).x * int(index.y) + int(index.x);
-
-    imageStore(hr_image, ivec2(index.xy),
-    vec4(texelFetch(filterbank, overall).xyz, 255.0) / 255.0);*/
 
     //run_tests();
 }
