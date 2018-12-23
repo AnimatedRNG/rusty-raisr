@@ -18,9 +18,9 @@ const NUM_TRIALS: usize = 1;
 const ALIGNED_PATCH_ELEMENT_SIZE: usize = 4;
 
 pub struct GLSLConfiguration {
-    benchmark: bool,
-    gradient_gather_unroll: bool,
-    unroll_loops: bool,
+    pub benchmark: bool,
+    pub gradient_gather_unroll: bool,
+    pub unroll_loops: bool,
 }
 
 fn filterbank_to_texture(
@@ -196,7 +196,7 @@ pub fn inference_gpu<'a>(
     let num_trials = if configuration.benchmark {
         NUM_TRIALS
     } else {
-        0
+        1
     };
 
     for _ in 0..num_trials {
