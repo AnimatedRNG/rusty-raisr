@@ -8,10 +8,10 @@ half_gradient = 4
 iteration = '''
 undecomposed.x += gradient_xx[upper_left.x + {i}][upper_left.y + {j}] * {gaussians}f; \\
 undecomposed.y += gradient_xy[upper_left.x + {i}][upper_left.y + {j}] * {gaussians}f; \\
-undecomposed.w += gradient_yy[upper_left.x + {i}][upper_left.y + {j}] * {gaussians}f; \\'''
+undecomposed.z += gradient_yy[upper_left.x + {i}][upper_left.y + {j}] * {gaussians}f; \\'''
 
 iteration_improved = '''
-undecomposed.xyw += vec3(                                                  \\
+undecomposed += vec3(                                                      \\
     gradient_xx[upper_left.x + {i}][upper_left.y + {j}],                   \\
     gradient_xy[upper_left.x + {i}][upper_left.y + {j}],                   \\
     gradient_yy[upper_left.x + {i}][upper_left.y + {j}]) * {gaussians}f;   \\'''

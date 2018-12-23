@@ -134,6 +134,29 @@ pub fn inference_gpu<'a>(
 
     let now = Instant::now();
 
+    struct GaussianWeights {
+        weights: [f32],
+    }
+
+    implement_buffer_content!(GaussianWeights);
+    implement_uniform_block!(GaussianWeights, weights);
+
+    let mut weight_buffer =
+        glium::uniforms::UniformBuffer::<GaussianWeights>::empty_unsized_immutable(
+            &display,
+            GRADIENT_SIZE * GRADIENT_SIZE * 4,
+        )
+        .unwrap();
+
+    {
+        let mut weight_buffer = weight_buffer.map();
+
+        // Awful; refactor sometime
+        for (index, val) in weight_buffer.weights.iter_mut().enumerate() {
+            *val = WEIGHTS[index];
+        }
+    }
+
     let lr_sampler = input_texture
         .sampled()
         .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
@@ -155,12 +178,13 @@ pub fn inference_gpu<'a>(
         match &hash_texture {
             None => program.execute(
                 uniform! {
-                lr_image: lr_sampler,
-                filterbank: &filterbank_texture,
-                bounds: bounds_sampler,
-                hr_image: hr_image_object,
-                hash_image_enabled: false,
-                R: R as u32,
+                    lr_image: lr_sampler,
+                    filterbank: &filterbank_texture,
+                    bounds: bounds_sampler,
+                    hr_image: hr_image_object,
+                    hash_image_enabled: false,
+                    R: R as u32,
+                    GaussianWeights: &*weight_buffer,
                 },
                 ((image_dimensions.0 as FloatType * R as FloatType) / BLOCK_DIM as FloatType).ceil()
                     as u32,
@@ -177,6 +201,7 @@ pub fn inference_gpu<'a>(
                     hash_image_enabled: true,
                     hr_image: hr_image_object,
                     R: R as u32,
+                    GaussianWeights: &weight_buffer,
                 },
                 ((image_dimensions.0 as FloatType * R as FloatType) / BLOCK_DIM as FloatType).ceil()
                     as u32,

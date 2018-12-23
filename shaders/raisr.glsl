@@ -6,7 +6,10 @@
 
 #define BLOCK_DIM
 #define IMAGE_KERNEL_HALF_SIZE 5
+#define IMAGE_KERNEL_SIZE (IMAGE_KERNEL_HALF_SIZE * 2 + 1)
 #define GRADIENT_KERNEL_HALF_SIZE 4
+#define GRADIENT_KERNEL_SIZE (GRADIENT_KERNEL_HALF_SIZE * 2 + 1)
+#define GRADIENT_KERNEL_SIZE_SQ (GRADIENT_KERNEL_SIZE * GRADIENT_KERNEL_SIZE)
 #define ALIGNED_PATCH_ELEMENT_SIZE 4
 #define ALIGNED_PATCH_VEC_SIZE 132
 #define ALIGNED_PATCH_VEC_ELEMENTS (ALIGNED_PATCH_VEC_SIZE / ALIGNED_PATCH_ELEMENT_SIZE)
@@ -30,6 +33,10 @@ uniform usampler2D hash_image;
 uniform bool hash_image_enabled;
 uniform uint R;
 layout(RGBA8) uniform image2D hr_image;
+
+layout(std140) uniform GaussianWeights {
+    float weights[GRADIENT_KERNEL_SIZE_SQ];
+};
 
 shared float bilinear_data[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
     BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE];
@@ -146,12 +153,20 @@ vec4 weight_gradient(uvec2 upper_left) {
     uvec2 lower_right = upper_left + GRADIENT_KERNEL_HALF_SIZE * 2;
 
     // G @ W @ G.T
-    vec4 undecomposed = vec4(0.0, 0.0, 0.0, 0.0);
-    GRADIENT_GATHER()
-    undecomposed.z = undecomposed.y;
+    vec3 undecomposed = vec3(0.0, 0.0, 0.0);
+    //GRADIENT_GATHER()
+
+    uint weight_index = 0;
+    for (uint i = upper_left.x; i <= lower_right.x; i++) {
+        for (uint j = upper_left.y; j <= lower_right.y; j++) {
+            undecomposed += vec3(gradient_xx[i][j],
+                                 gradient_xy[i][j],
+                                 gradient_yy[i][j]) * weights[weight_index++];
+        }
+    }
 
     return vec4(undecomposed.x, undecomposed.y,
-                undecomposed.z, undecomposed.w);
+                undecomposed.y, undecomposed.z);
 }
 
 void eigendecomposition(in vec4 m, out vec2 lambda, out vec4 evec) {
