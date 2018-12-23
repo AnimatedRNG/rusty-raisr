@@ -1,11 +1,22 @@
 #version 430
 
+#extension GL_NV_gpu_shader5 : enable
+#extension GL_AMD_gpu_shader_half_float : enable
+
 #define HASH_IMAGE_ENABLED 0
 #define GATHER_UNROLL_ENABLED 0
 #define UNROLL_LOOPS 0
+#define FLOAT_16_ENABLED 0
 
-#ifdef UNROLL_LOOPS
+#if UNROLL_LOOPS
 #pragma optionNV(unroll all)
+#endif
+
+#if !FLOAT_16_ENABLED || !(defined(GL_NV_gpu_shader5) || defined(GL_AMD_gpu_shader_half_float))
+#define float16_t float
+#define f16vec2 vec2
+#define f16vec3 vec3
+#define f16vec4 vec4
 #endif
 
 #define BLOCK_DIM
@@ -41,20 +52,20 @@ layout(std140) uniform GaussianWeights {
     float weights[GRADIENT_KERNEL_SIZE_SQ];
 };
 
-shared float bilinear_data[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
+shared float16_t bilinear_data[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
     BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE];
-shared vec2 bilinear_chroma_data[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
+shared f16vec2 bilinear_chroma_data[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
     BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE];
-shared float gradient_xx[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
+shared float16_t gradient_xx[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
     BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE];
-shared float gradient_xy[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
+shared float16_t gradient_xy[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
     BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE];
-shared float gradient_yy[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
+shared float16_t gradient_yy[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
     BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE];
 
 #define GRADIENT_GATHER
 
-#line 55
+#line 68
 
 vec4 to_ycbcr(in vec4 inp) {
     return vec4(dot(inp, vec4(0.299, 0.587, 0.114, 0.0)),
@@ -100,10 +111,10 @@ void load_bilinear_into_shared_tiled() {
             uvec2 mem_offset = uvec2(a_i, a_j) * BLOCK_DIM + thread_idx;
             ivec2 coords = ivec2(upper_left + mem_offset);
             if (coords.x < lower_right.x && coords.y < lower_right.y) {
-                vec4 ycbcr = to_ycbcr(bilinear_filter(coords));
+                f16vec4 ycbcr = f16vec4(to_ycbcr(bilinear_filter(coords)));
                 bilinear_data[mem_offset.x][mem_offset.y] = ycbcr.x;
                 bilinear_chroma_data[mem_offset.x][mem_offset.y] =
-                    vec2(ycbcr.y, ycbcr.z);
+                    f16vec2(ycbcr.y, ycbcr.z);
             }
         }
     }
@@ -118,27 +129,27 @@ void load_bilinear_into_shared_tiled() {
             uvec2 bmo = mem_offset + 1;
             uvec2 coords = bmo + upper_left;
             if (coords.x < lower_right.x && coords.y < lower_right.y) {
-                vec4 col_0 = vec4(bilinear_data[bmo.x - 1][bmo.y - 1],
-                                  bilinear_data[bmo.x - 1][bmo.y],
-                                  bilinear_data[bmo.x - 1][bmo.y + 1],
-                                  0);
-                vec4 col_1 = vec4(bilinear_data[bmo.x][bmo.y - 1],
-                                  bilinear_data[bmo.x][bmo.y],
-                                  bilinear_data[bmo.x][bmo.y + 1],
-                                  0);
-                vec4 col_2 = vec4(bilinear_data[bmo.x + 1][bmo.y - 1],
-                                  bilinear_data[bmo.x + 1][bmo.y],
-                                  bilinear_data[bmo.x + 1][bmo.y + 1],
-                                  0);
+                f16vec4 col_0 = f16vec4(bilinear_data[bmo.x - 1][bmo.y - 1],
+                                        bilinear_data[bmo.x - 1][bmo.y],
+                                        bilinear_data[bmo.x - 1][bmo.y + 1],
+                                        0);
+                f16vec4 col_1 = f16vec4(bilinear_data[bmo.x][bmo.y - 1],
+                                        bilinear_data[bmo.x][bmo.y],
+                                        bilinear_data[bmo.x][bmo.y + 1],
+                                        0);
+                f16vec4 col_2 = f16vec4(bilinear_data[bmo.x + 1][bmo.y - 1],
+                                        bilinear_data[bmo.x + 1][bmo.y],
+                                        bilinear_data[bmo.x + 1][bmo.y + 1],
+                                        0);
 
-                float sobel_x;
-                sobel_x = dot(vec4(-1.0, -2.0, -1.0, 0.0), col_0);
-                sobel_x += dot(vec4(1.0, 2.0, 1.0, 0.0), col_2);
+                float16_t sobel_x;
+                sobel_x = dot(f16vec4(-1.0, -2.0, -1.0, 0.0), col_0);
+                sobel_x += dot(f16vec4(1.0, 2.0, 1.0, 0.0), col_2);
 
-                float sobel_y;
-                sobel_y = dot(vec4(-1.0, 0.0, 1.0, 0.0), col_0);
-                sobel_y += dot(vec4(-2.0, 0.0, 2.0, 0.0), col_1);
-                sobel_y += dot(vec4(-1.0, 0.0, 1.0, 0.0), col_2);
+                float16_t sobel_y;
+                sobel_y = dot(f16vec4(-1.0, 0.0, 1.0, 0.0), col_0);
+                sobel_y += dot(f16vec4(-2.0, 0.0, 2.0, 0.0), col_1);
+                sobel_y += dot(f16vec4(-1.0, 0.0, 1.0, 0.0), col_2);
 
                 gradient_xx[mem_offset.x][mem_offset.y] = sobel_y * sobel_y;
                 gradient_xy[mem_offset.x][mem_offset.y] = sobel_y * sobel_x;
@@ -256,10 +267,10 @@ float apply_filter(uvec4 key, uvec2 upper_left) {
     uint bounds_offset = base_offset;
     uint fb_offset = base_offset * ALIGNED_PATCH_VEC_ELEMENTS;
 
-    vec2 minmax = texelFetch(bounds, int(bounds_offset), 0).rg;
-    float min_val = minmax.x;
-    float max_val = minmax.y;
-    float span = max_val - min_val;
+    f16vec2 minmax = f16vec2(texelFetch(bounds, int(bounds_offset), 0).rg);
+    float16_t min_val = minmax.x;
+    float16_t max_val = minmax.y;
+    float16_t span = max_val - min_val;
     uint fb_ptr = fb_offset;
 
     uvec2 center = upper_left + IMAGE_KERNEL_HALF_SIZE;
@@ -272,27 +283,27 @@ float apply_filter(uvec4 key, uvec2 upper_left) {
                 ALIGNED_PATCH_ELEMENT_SIZE)),
               upper_left.y + kernel_offset);
 
-    float accum = 0.0;
+    float16_t accum = 0.0;
 
     for (uint j = upper_left.y; j < lower_right.y; j++) {
         for (uint i = upper_left.x; i < lower_right.x; i += 4) {
-            vec4 filters = ((vec4(texelFetch(filterbank, int(fb_ptr)))
-                             + 0.5) / 255.0) * span + min_val;
-            vec4 seq = vec4(bilinear_data[i][j],
-                            bilinear_data[i + 1][j],
-                            bilinear_data[i + 2][j],
-                            bilinear_data[i + 3][j]);
+            f16vec4 filters = ((f16vec4(texelFetch(filterbank, int(fb_ptr)))
+                                + 0.5) / 255.0) * span + min_val;
+            f16vec4 seq = f16vec4(bilinear_data[i][j],
+                                  bilinear_data[i + 1][j],
+                                  bilinear_data[i + 2][j],
+                                  bilinear_data[i + 3][j]);
 
             accum += dot(seq, filters);
             fb_ptr++;
         }
 
         // TODO: Properly handle different cases here
-        vec3 filters = ((vec3(texelFetch(filterbank, int(fb_ptr)))
-                         + 0.5) / 255.0) * span + min_val;
-        vec3 seq = vec3(bilinear_data[lower_right.x][j],
-                        bilinear_data[lower_right.x + 1][j],
-                        bilinear_data[lower_right.x + 2][j]);
+        f16vec3 filters = ((f16vec3(texelFetch(filterbank, int(fb_ptr)))
+                            + 0.5) / 255.0) * span + min_val;
+        f16vec3 seq = f16vec3(bilinear_data[lower_right.x][j],
+                              bilinear_data[lower_right.x + 1][j],
+                              bilinear_data[lower_right.x + 2][j]);
         accum += dot(seq, filters);
         fb_ptr++;
     }

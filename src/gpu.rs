@@ -21,6 +21,7 @@ pub struct GLSLConfiguration {
     pub benchmark: bool,
     pub gradient_gather_unroll: bool,
     pub unroll_loops: bool,
+    pub half_precision: bool,
 }
 
 fn filterbank_to_texture(
@@ -152,6 +153,7 @@ pub fn inference_gpu<'a>(
             configuration.gradient_gather_unroll,
         );
         set_shader_toggle("UNROLL_LOOPS", configuration.unroll_loops);
+        set_shader_toggle("FLOAT_16_ENABLED", configuration.half_precision)
     }
     //println!("Shader: {}", raisr_shader);
 
@@ -290,6 +292,7 @@ mod tests {
             benchmark: true,
             gradient_gather_unroll: true,
             unroll_loops: false,
+            half_precision: true,
         };
         let filterbank = read_filter("filters/filterbank");
         let input_image = SizedRawImage2d::read_image(input_image_name);

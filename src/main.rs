@@ -78,6 +78,7 @@ fn main() {
                 benchmark: matches.is_present("benchmark"),
                 gradient_gather_unroll: true,
                 unroll_loops: false,
+                half_precision: true,
             },
         );
         SizedRawImage2d::write_image(&output_image_name, &output_image);
