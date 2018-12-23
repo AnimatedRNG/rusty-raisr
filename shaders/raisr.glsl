@@ -30,6 +30,10 @@
 #define ALIGNED_PATCH_VEC_ELEMENTS (ALIGNED_PATCH_VEC_SIZE / ALIGNED_PATCH_ELEMENT_SIZE)
 
 #define M_PI 3.1415926535897932384626433832795
+#define QUARTER_PI 0.785398
+#define C1 1
+#define C3 -0.301895
+#define C5 0.0872929
 
 #define Qangle 24
 #define Qstrength 3
@@ -65,7 +69,7 @@ shared float16_t gradient_yy[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
 
 #define GRADIENT_GATHER
 
-#line 68
+#line 72
 
 vec4 to_ycbcr(in vec4 inp) {
     return vec4(dot(inp, vec4(0.299, 0.587, 0.114, 0.0)),
@@ -213,6 +217,19 @@ void eigendecomposition(in vec4 m, out vec2 lambda, out vec4 evec) {
     }
 }
 
+// adapted from
+// https://seblagarde.wordpress.com/2014/12/01/inverse-trigonometric-functions-gpu-optimization-for-amd-gcn-architecture/#more-3316
+float ATan2PosDeg5(float x, float y) {
+    float t0 = (x - y) / (x + y);
+    float t1 = t0 * t0;
+    float poly = C5;
+    poly = C3 + poly * t1;
+    poly = C1 + poly * t1;
+    poly = poly * t0;
+
+    return QUARTER_PI + poly; // undo range reduction
+}
+
 uvec4 hashkey(in uvec2 thread_idx, in uvec2 block_idx) {
     vec4 weighted_grad = weight_gradient(thread_idx);
 
@@ -221,6 +238,7 @@ uvec4 hashkey(in uvec2 thread_idx, in uvec2 block_idx) {
     eigendecomposition(weighted_grad, eval, evec);
 
     float theta = atan(evec.z, evec.x);
+    //float theta = ATan2PosDeg5(evec.x, evec.z);
     theta = theta < 0.0 ? (theta + M_PI) : theta;
 
     float lambda = eval.x;
