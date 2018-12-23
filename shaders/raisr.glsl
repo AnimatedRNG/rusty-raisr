@@ -175,13 +175,9 @@ void eigendecomposition(in vec4 m, out vec2 lambda, out vec4 evec) {
 
         // Fix normalization some day
         float n1 = sqrt(evec.x * evec.x + evec.y * evec.y);
-        evec.x /= n1;
-        //evec.y /= n1;
-        //evec.xy /= length(evec.xy);
-
         float n2 = sqrt(evec.z * evec.z + evec.w * evec.w);
-        evec.y /= n2;
-        //evec.zw /= length(evec.zw);
+
+        evec = vec4(evec.x / n1, evec.y, evec.z / n2, evec.w);
     }
 }
 
@@ -208,7 +204,7 @@ uvec4 hashkey(in uvec2 thread_idx, in uvec2 block_idx) {
         u = (sqrtlambda1 - sqrtlambda2) / (sqrtlambda1 + sqrtlambda2);
     }
 
-    uint angle = uint(floor(theta / M_PI * Qangle));
+    uint angle = uint(floor((theta / M_PI) * Qangle));
     uint strength = (lambda < 0.0001) ? 0 : (lambda > 0.001 ? 2 : 1);
     uint coherence = (u < 0.25) ? 0 : (u > 0.5 ? 2 : 1);
 
@@ -226,7 +222,7 @@ float apply_filter(uvec4 key, uvec2 upper_left) {
     //            strength * Qcoherence * R_2 +
     //            angle * Qstrength * Qcoherence * R_2
 
-    // bounds_offset = base * 2
+    // bounds_offset = base
     // fb_offset = base * ALIGNED_PATCH_VEC_ELEMENTS
 
     /*uint base_offset = uint(dot(key, uvec4(Qstrength * Qcoherence * R * R,
@@ -289,17 +285,33 @@ bool test_eigendecomposition() {
 
     eigendecomposition(vec4(5.0, 3.0, 3.0, 2.0), eval, evec);
 
-    uvec3 index = gl_GlobalInvocationID;
-    imageStore(hr_image, ivec2(index.xy), vec4(evec.xyz, 1.0));
+    bool t1 = EQ(eval,
+                 vec2(6.854101966249685, 0.1458980337503153))
+              && EQ(evec,
+                    vec4(0.8506508083520399, 3.0, 0.5257311121191336, -4.854101966249685));
 
-    return EQ(eval, vec2(6.854101966249685, 0.1458980337503153))
-           && EQ(evec, vec4(0.8506508083520399, 0.5257311121191336, 3.0,
-                            -4.854101966249685));
+    eigendecomposition(vec4(2.0, 3.0, 3.0, 4.0), eval, evec);
+
+    bool t2 = EQ(eval,
+                 vec2(6.16227766016838, -0.16227766016837952))
+              && EQ(evec,
+                    vec4(0.5847102846637648, -4.16227766016838, 0.8112421851755608, 3));
+
+    return t1 && t2;
+}
+
+bool test_hashkey() {
+    // TODO: Flesh out this test
+    uvec4 result = hashkey(uvec2(0, 0), uvec2(0, 0));
+
+    return true;
+    //return (result.xyz == uvec3(7, 2, 1));
 }
 
 void run_tests() {
     bool passing = true;
     passing = passing && test_eigendecomposition();
+    passing = passing && test_hashkey();
     uvec3 index = gl_GlobalInvocationID;
 
     if (passing) {
