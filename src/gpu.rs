@@ -20,6 +20,7 @@ const ALIGNED_PATCH_ELEMENT_SIZE: usize = 4;
 pub struct GLSLConfiguration {
     pub benchmark: bool,
     pub gradient_gather_unroll: bool,
+    pub filter_unroll: bool,
     pub unroll_loops: bool,
     pub half_precision: bool,
 }
@@ -131,12 +132,20 @@ pub fn inference_gpu<'a>(
         .read_to_string(&mut gradient_gather_shader)
         .unwrap();
 
+    let mut accumulate_filter_file =
+        File::open("shaders/filter.glsl").expect("Can't find filter.glsl!");
+    let mut accumulate_filter_shader = String::new();
+    accumulate_filter_file
+        .read_to_string(&mut accumulate_filter_shader)
+        .unwrap();
+
     let raisr_shader = raisr_shader.replace(
         "#define BLOCK_DIM",
         &format!("#define BLOCK_DIM {}", BLOCK_DIM),
     );
 
-    let mut raisr_shader = raisr_shader.replace("#define GRADIENT_GATHER", &gradient_gather_shader);
+    let raisr_shader = raisr_shader.replace("#define GRADIENT_GATHER", &gradient_gather_shader);
+    let mut raisr_shader = raisr_shader.replace("#define ACCUMULATE_FILTER", &accumulate_filter_shader);
 
     {
         let mut set_shader_toggle = |name: &str, value: bool| {
@@ -151,6 +160,10 @@ pub fn inference_gpu<'a>(
         set_shader_toggle(
             "GATHER_UNROLL_ENABLED",
             configuration.gradient_gather_unroll,
+        );
+        set_shader_toggle(
+            "FILTER_UNROLL_ENABLED",
+            configuration.filter_unroll,
         );
         set_shader_toggle("UNROLL_LOOPS", configuration.unroll_loops);
         set_shader_toggle("FLOAT_16_ENABLED", configuration.half_precision)
@@ -291,6 +304,7 @@ mod tests {
         let config = GLSLConfiguration {
             benchmark: true,
             gradient_gather_unroll: true,
+            filter_unroll: true,
             unroll_loops: false,
             half_precision: true,
         };

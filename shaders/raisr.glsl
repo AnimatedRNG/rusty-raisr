@@ -5,6 +5,7 @@
 
 #define HASH_IMAGE_ENABLED 0
 #define GATHER_UNROLL_ENABLED 0
+#define FILTER_UNROLL_ENABLED 0
 #define UNROLL_LOOPS 0
 #define FLOAT_16_ENABLED 0
 
@@ -68,8 +69,9 @@ shared float16_t gradient_yy[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
     BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE];
 
 #define GRADIENT_GATHER
+#define ACCUMULATE_FILTER
 
-#line 72
+#line 74
 
 vec4 to_ycbcr(in vec4 inp) {
     return vec4(dot(inp, vec4(0.299, 0.587, 0.114, 0.0)),
@@ -283,13 +285,13 @@ float apply_filter(uvec4 key, uvec2 upper_left) {
                        key.y * Qcoherence * R * R + key.z * R * R + key.w;
 
     uint bounds_offset = base_offset;
-    uint fb_offset = base_offset * ALIGNED_PATCH_VEC_ELEMENTS;
+    int fb_offset = int(base_offset * ALIGNED_PATCH_VEC_ELEMENTS);
 
     f16vec2 minmax = f16vec2(texelFetch(bounds, int(bounds_offset), 0).rg);
     float16_t min_val = minmax.x;
     float16_t max_val = minmax.y;
     float16_t span = max_val - min_val;
-    uint fb_ptr = fb_offset;
+    int fb_ptr = fb_offset;
 
     uvec2 center = upper_left + IMAGE_KERNEL_HALF_SIZE;
     uint kernel_offset = IMAGE_KERNEL_HALF_SIZE * 2 + 1;
@@ -300,12 +302,14 @@ float apply_filter(uvec4 key, uvec2 upper_left) {
         uvec2(upper_left.x + kernel_offset - uint(mod(kernel_offset,
                 ALIGNED_PATCH_ELEMENT_SIZE)),
               upper_left.y + kernel_offset);
-
+#if FILTER_UNROLL_ENABLED
+    ACCUMULATE_FILTER()
+#else
     float16_t accum = 0.0;
 
     for (uint j = upper_left.y; j < lower_right.y; j++) {
         for (uint i = upper_left.x; i < lower_right.x; i += 4) {
-            f16vec4 filters = ((f16vec4(texelFetch(filterbank, int(fb_ptr)))
+            f16vec4 filters = ((f16vec4(texelFetch(filterbank, fb_ptr))
                                 + 0.5) / 255.0) * span + min_val;
             f16vec4 seq = f16vec4(bilinear_data[i][j],
                                   bilinear_data[i + 1][j],
@@ -316,15 +320,15 @@ float apply_filter(uvec4 key, uvec2 upper_left) {
             fb_ptr++;
         }
 
-        // TODO: Properly handle different cases here
-        f16vec3 filters = ((f16vec3(texelFetch(filterbank, int(fb_ptr)))
+        f16vec3 filters = ((f16vec3(texelFetch(filterbank, fb_ptr))
                             + 0.5) / 255.0) * span + min_val;
         f16vec3 seq = f16vec3(bilinear_data[lower_right.x][j],
                               bilinear_data[lower_right.x + 1][j],
                               bilinear_data[lower_right.x + 2][j]);
         accum += dot(seq, filters);
         fb_ptr++;
-    }
+        }
+#endif
 
     return accum;
 }

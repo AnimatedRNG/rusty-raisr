@@ -77,6 +77,7 @@ fn main() {
             &GLSLConfiguration {
                 benchmark: matches.is_present("benchmark"),
                 gradient_gather_unroll: true,
+                filter_unroll: true,
                 unroll_loops: false,
                 half_precision: true,
             },
