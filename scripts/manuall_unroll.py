@@ -7,15 +7,7 @@ half_gradient = 4
 half_filter = 5
 
 gradient_iteration = '''
-undecomposed.x += gradient_xx[upper_left.x + {i}][upper_left.y + {j}] * {gaussians}f; \\
-undecomposed.y += gradient_xy[upper_left.x + {i}][upper_left.y + {j}] * {gaussians}f; \\
-undecomposed.z += gradient_yy[upper_left.x + {i}][upper_left.y + {j}] * {gaussians}f; \\'''
-
-gradient_iteration_improved = '''
-undecomposed += vec3(                                                      \\
-    gradient_xx[upper_left.x + {i}][upper_left.y + {j}],                   \\
-    gradient_xy[upper_left.x + {i}][upper_left.y + {j}],                   \\
-    gradient_yy[upper_left.x + {i}][upper_left.y + {j}]) * {gaussians}f;   \\'''
+undecomposed += gradient[upper_left.x + {i}][upper_left.y + {j}] * {gaussians}f;   \\'''
 
 filtering_iteration_aligned = '''
 filters = ((f16vec4(texelFetch(filterbank, fb_offset + {index}))            \\
@@ -62,8 +54,8 @@ def unroll_gradient():
 
     for i in range(dim):
         for j in range(dim):
-            gradient_source += gradient_iteration_improved.format(i=i,
-                                                                  j=j, gaussians=weighting[i][j])
+            gradient_source += gradient_iteration.format(i=i,
+                                                         j=j, gaussians=weighting[i][j])
 
     gradient_source = gradient_source[: -2] + '\n'
 

@@ -61,11 +61,7 @@ shared float16_t bilinear_data[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
     BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE];
 shared f16vec2 bilinear_chroma_data[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
     BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE];
-shared float16_t gradient_xx[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
-    BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE];
-shared float16_t gradient_xy[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
-    BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE];
-shared float16_t gradient_yy[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
+shared f16vec3 gradient[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
     BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE];
 
 #define GRADIENT_GATHER
@@ -157,9 +153,8 @@ void load_bilinear_into_shared_tiled() {
                 sobel_y += dot(f16vec4(-2.0, 0.0, 2.0, 0.0), col_1);
                 sobel_y += dot(f16vec4(-1.0, 0.0, 1.0, 0.0), col_2);
 
-                gradient_xx[mem_offset.x][mem_offset.y] = sobel_y * sobel_y;
-                gradient_xy[mem_offset.x][mem_offset.y] = sobel_y * sobel_x;
-                gradient_yy[mem_offset.x][mem_offset.y] = sobel_x * sobel_x;
+                gradient[mem_offset.x][mem_offset.y] =
+                    f16vec3(sobel_y * sobel_y, sobel_y * sobel_x, sobel_x * sobel_x);
             }
         }
     }
@@ -327,7 +322,7 @@ float apply_filter(uvec4 key, uvec2 upper_left) {
                               bilinear_data[lower_right.x + 2][j]);
         accum += dot(seq, filters);
         fb_ptr++;
-        }
+    }
 #endif
 
     return accum;
