@@ -114,8 +114,8 @@ void load_bilinear_into_shared_tiled() {
             ivec2 coords = ivec2(upper_left + mem_offset);
             if (coords.x < lower_right.x && coords.y < lower_right.y) {
                 f16vec4 ycbcr = f16vec4(to_ycbcr(bilinear_filter(coords)));
-                bilinear_data[mem_offset.x][mem_offset.y] = ycbcr.x;
-                bilinear_chroma_data[mem_offset.x][mem_offset.y] =
+                bilinear_data[mem_offset.y][mem_offset.x] = ycbcr.x;
+                bilinear_chroma_data[mem_offset.y][mem_offset.x] =
                     f16vec2(ycbcr.y, ycbcr.z);
             }
         }
@@ -131,17 +131,17 @@ void load_bilinear_into_shared_tiled() {
             uvec2 bmo = mem_offset + 1;
             uvec2 coords = bmo + upper_left;
             if (coords.x < lower_right.x && coords.y < lower_right.y) {
-                f16vec4 col_0 = f16vec4(bilinear_data[bmo.x - 1][bmo.y - 1],
-                                        bilinear_data[bmo.x - 1][bmo.y],
-                                        bilinear_data[bmo.x - 1][bmo.y + 1],
+                f16vec4 col_0 = f16vec4(bilinear_data[bmo.y - 1][bmo.x - 1],
+                                        bilinear_data[bmo.y][bmo.x - 1],
+                                        bilinear_data[bmo.y + 1][bmo.x - 1],
                                         0);
-                f16vec4 col_1 = f16vec4(bilinear_data[bmo.x][bmo.y - 1],
-                                        bilinear_data[bmo.x][bmo.y],
-                                        bilinear_data[bmo.x][bmo.y + 1],
+                f16vec4 col_1 = f16vec4(bilinear_data[bmo.y - 1][bmo.x],
+                                        bilinear_data[bmo.y][bmo.x],
+                                        bilinear_data[bmo.y + 1][bmo.x],
                                         0);
-                f16vec4 col_2 = f16vec4(bilinear_data[bmo.x + 1][bmo.y - 1],
-                                        bilinear_data[bmo.x + 1][bmo.y],
-                                        bilinear_data[bmo.x + 1][bmo.y + 1],
+                f16vec4 col_2 = f16vec4(bilinear_data[bmo.y - 1][bmo.x + 1],
+                                        bilinear_data[bmo.y][bmo.x + 1],
+                                        bilinear_data[bmo.y + 1][bmo.x + 1],
                                         0);
 
                 float16_t sobel_x;
@@ -393,7 +393,7 @@ void main() {
     vec4 vis = vec4(key) / vec4(Qangle, Qstrength, Qcoherence, R * R);
     vis.w = 1.0;
 
-    vec2 chroma = bilinear_chroma_data[offset.x][offset.y];
+    vec2 chroma = bilinear_chroma_data[offset.y][offset.x];
 
     //imageStore(hr_image, ivec2(index.xy), vec4(vis.x, vis.y, vis.z, 1.0));
     //imageStore(hr_image, ivec2(index.xy), vec4(accum, accum, accum, 1.0));
