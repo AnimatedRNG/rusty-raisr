@@ -67,7 +67,7 @@ shared f16vec3 gradient[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
 #define GRADIENT_GATHER
 #define ACCUMULATE_FILTER
 
-#line 74
+#line 70
 
 vec4 to_ycbcr(in vec4 inp) {
     return vec4(dot(inp, vec4(0.299, 0.587, 0.114, 0.0)),
