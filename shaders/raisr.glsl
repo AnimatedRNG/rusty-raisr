@@ -4,7 +4,6 @@
 #extension GL_AMD_gpu_shader_half_float : enable
 
 #define HASH_IMAGE_ENABLED 0
-#define GATHER_UNROLL_ENABLED 0
 #define FILTER_UNROLL_ENABLED 0
 #define UNROLL_LOOPS 0
 #define FLOAT_16_ENABLED 0
@@ -169,19 +168,7 @@ vec4 weight_gradient(uvec2 upper_left) {
     // G @ W @ G.T
     vec3 undecomposed = vec3(0.0, 0.0, 0.0);
 
-#if GATHER_UNROLL_ENABLED
     GRADIENT_GATHER()
-#else
-    // TODO: Actually fix this path...
-    uint weight_index = 0;
-    for (uint i = upper_left.x; i <= lower_right.x; i++) {
-        for (uint j = upper_left.y; j <= lower_right.y; j++) {
-            undecomposed += vec3(gradient_xx[i][j],
-                                 gradient_xy[i][j],
-                                 gradient_yy[i][j]) * weights[weight_index++];
-        }
-    }
-#endif
 
     return vec4(undecomposed.x, undecomposed.y,
                 undecomposed.y, undecomposed.z);

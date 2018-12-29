@@ -19,7 +19,6 @@ const ALIGNED_PATCH_ELEMENT_SIZE: usize = 4;
 
 pub struct GLSLConfiguration {
     pub benchmark: bool,
-    pub gradient_gather_unroll: bool,
     pub filter_unroll: bool,
     pub unroll_loops: bool,
     pub half_precision: bool,
@@ -157,10 +156,6 @@ pub fn inference_gpu<'a>(
         };
 
         set_shader_toggle("HASH_IMAGE_ENABLED", hash_texture.is_some());
-        set_shader_toggle(
-            "GATHER_UNROLL_ENABLED",
-            configuration.gradient_gather_unroll,
-        );
         set_shader_toggle(
             "FILTER_UNROLL_ENABLED",
             configuration.filter_unroll,
@@ -303,7 +298,6 @@ mod tests {
     ) {
         let config = GLSLConfiguration {
             benchmark: true,
-            gradient_gather_unroll: true,
             filter_unroll: true,
             unroll_loops: false,
             half_precision: true,
