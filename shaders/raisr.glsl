@@ -52,10 +52,6 @@ uniform usampler2D hash_image;
 uniform uint R;
 layout(RGBA8) uniform image2D hr_image;
 
-layout(std140) uniform GaussianWeights {
-    float weights[GRADIENT_KERNEL_SIZE_SQ];
-};
-
 shared float16_t bilinear_data[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
     BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE];
 shared f16vec2 bilinear_chroma_data[BLOCK_DIM + 2 * IMAGE_KERNEL_HALF_SIZE][
